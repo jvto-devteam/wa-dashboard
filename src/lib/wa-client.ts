@@ -1,0 +1,519 @@
+import {
+  makeWASocket,
+  DisconnectReason,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
+  isJidBroadcast,
+} from "@whiskeysockets/baileys";
+import { Boom } from "@hapi/boom";
+import QRCode from "qrcode";
+import path from "path";
+import fs from "fs";
+import pino from "pino";
+
+declare global {
+  var __waClients: Map<string, WhatsAppClient> | undefined;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractMessagePayload(key: any, timestamp: unknown, msgType: string, msgObj: Record<string, unknown>) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const m = (msgObj[msgType] ?? {}) as Record<string, any>;
+
+  let text: string | null = null;
+  let media: Record<string, unknown> | null = null;
+  let location: Record<string, unknown> | null = null;
+  let contact: Record<string, unknown> | null = null;
+
+  switch (msgType) {
+    case "conversation":
+      text = msgObj.conversation as string;
+      break;
+    case "extendedTextMessage":
+      text = m.text ?? null;
+      break;
+    case "imageMessage":
+    case "videoMessage":
+    case "stickerMessage":
+      text = m.caption ?? null;
+      media = {
+        url: m.url ?? null,
+        mimetype: m.mimetype ?? null,
+        fileSize: m.fileLength ? Number(m.fileLength) : null,
+        ...(msgType === "videoMessage" && { seconds: m.seconds ?? null }),
+        ...(msgType === "stickerMessage" && { isAnimated: m.isAnimated ?? false }),
+      };
+      break;
+    case "audioMessage":
+      media = {
+        url: m.url ?? null,
+        mimetype: m.mimetype ?? null,
+        seconds: m.seconds ?? null,
+        ptt: m.ptt ?? false,
+      };
+      break;
+    case "documentMessage":
+      text = m.caption ?? null;
+      media = {
+        url: m.url ?? null,
+        mimetype: m.mimetype ?? null,
+        fileSize: m.fileLength ? Number(m.fileLength) : null,
+        filename: m.fileName ?? null,
+        title: m.title ?? null,
+      };
+      break;
+    case "locationMessage":
+    case "liveLocationMessage":
+      location = {
+        latitude: m.degreesLatitude ?? null,
+        longitude: m.degreesLongitude ?? null,
+        name: m.name ?? null,
+        address: m.address ?? null,
+        isLive: msgType === "liveLocationMessage",
+      };
+      break;
+    case "contactMessage":
+      contact = {
+        displayName: m.displayName ?? null,
+        vcard: m.vcard ?? null,
+      };
+      break;
+    case "contactsArrayMessage":
+      contact = {
+        contacts: (m.contacts as { displayName?: string; vcard?: string }[] | undefined)?.map((c) => ({
+          displayName: c.displayName ?? null,
+          vcard: c.vcard ?? null,
+        })) ?? [],
+      };
+      break;
+  }
+
+  return {
+    from: key.remoteJid,
+    fromMe: key.fromMe,
+    id: key.id,
+    timestamp,
+    type: msgType,
+    text,
+    ...(media && { media }),
+    ...(location && { location }),
+    ...(contact && { contact }),
+  };
+}
+
+type Listener = (data: { event: string; [key: string]: unknown }) => void;
+export type ConnectionStatus = "disconnected" | "connecting" | "connected";
+
+interface WaStats {
+  sent: number;
+  received: number;
+  startTime: number;
+}
+
+export class WhatsAppClient {
+  numberId: string;
+  authDirRelative: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sock: any = null;
+  status: ConnectionStatus = "disconnected";
+  qrDataUrl: string | null = null;
+  user: { id: string; name: string } | null = null;
+  stats: WaStats = { sent: 0, received: 0, startTime: Date.now() };
+  webhookUrl: string | null = null;
+  listeners: Set<Listener> = new Set();
+
+  constructor(
+    numberId: string,
+    authDirRelative: string,
+    webhookUrl?: string | null
+  ) {
+    this.numberId = numberId;
+    this.authDirRelative = authDirRelative;
+    this.webhookUrl = webhookUrl ?? null;
+  }
+
+  emit(event: string, data: Record<string, unknown> = {}) {
+    const payload = { event, ...data };
+    this.listeners.forEach((fn) => {
+      try {
+        fn(payload);
+      } catch {
+        // ignore
+      }
+    });
+  }
+
+  subscribe(fn: Listener) {
+    this.listeners.add(fn);
+  }
+
+  unsubscribe(fn: Listener) {
+    this.listeners.delete(fn);
+  }
+
+  async connect() {
+    if (this.status === "connecting" || this.status === "connected") return;
+    this.status = "connecting";
+    this.emit("status", { status: "connecting" });
+
+    const logger = pino({ level: "silent" });
+    const authPath = path.join(process.cwd(), this.authDirRelative);
+    fs.mkdirSync(authPath, { recursive: true });
+
+    const { state, saveCreds } = await useMultiFileAuthState(authPath);
+    const { version } = await fetchLatestBaileysVersion();
+
+    const sock = makeWASocket({
+      version,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger),
+      },
+      printQRInTerminal: false,
+      logger,
+      browser: ["WA Dashboard", "Chrome", "1.0.0"],
+    });
+
+    this.sock = sock;
+    sock.ev.on("creds.update", saveCreds);
+
+    sock.ev.on(
+      "connection.update",
+      async (update: {
+        connection?: string;
+        lastDisconnect?: { error?: unknown };
+        qr?: string;
+      }) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+          try {
+            this.qrDataUrl = await QRCode.toDataURL(qr, {
+              width: 300,
+              margin: 2,
+              color: { dark: "#000000", light: "#ffffff" },
+            });
+            this.emit("qr", { qr: this.qrDataUrl });
+          } catch (err) {
+            console.error("QR generation error:", err);
+          }
+        }
+
+        if (connection === "close") {
+          const statusCode = (lastDisconnect?.error as Boom)?.output
+            ?.statusCode;
+          const shouldReconnect =
+            statusCode !== DisconnectReason.loggedOut &&
+            statusCode !== DisconnectReason.forbidden;
+
+          this.status = "disconnected";
+          this.qrDataUrl = null;
+          this.user = null;
+          this.sock = null;
+          this.emit("status", { status: "disconnected" });
+
+          if (shouldReconnect) {
+            setTimeout(() => this.connect(), 3000);
+          }
+        }
+
+        if (connection === "open") {
+          this.status = "connected";
+          this.qrDataUrl = null;
+          const me = sock.user;
+          this.user = me ? { id: me.id, name: me.name ?? me.id } : null;
+
+          // Persist phone number to DB
+          if (this.user && this.numberId !== "legacy") {
+            try {
+              const { db } = await import("./db");
+              const phoneNumber =
+                this.user.id.split(":")[0]?.split("@")[0] ?? null;
+              await db.waNumber.update({
+                where: { id: this.numberId },
+                data: { phoneNumber },
+              });
+            } catch {
+              // non-fatal
+            }
+          }
+
+          this.emit("connected", { user: this.user });
+          this.emit("status", { status: "connected", user: this.user });
+        }
+      }
+    );
+
+    sock.ev.on(
+      "messages.upsert",
+      async ({ messages, type }: { messages: unknown[]; type: string }) => {
+        if (type !== "notify") return;
+        for (const msg of messages as {
+          message?: unknown;
+          key: {
+            remoteJid?: string | null;
+            fromMe?: boolean;
+            id?: string;
+          };
+          messageTimestamp?: unknown;
+        }[]) {
+          if (!msg.message) continue;
+          if (isJidBroadcast(msg.key.remoteJid ?? "")) continue;
+
+          this.stats.received++;
+
+          const msgObj = msg.message as Record<string, unknown>;
+          const msgType = Object.keys(msgObj)[0];
+          const payload = extractMessagePayload(msg.key, msg.messageTimestamp, msgType, msgObj);
+
+          this.emit("message", { message: payload });
+          this.emit("stats", { stats: this.stats });
+
+          // Log incoming message to DB
+          if (this.numberId !== "legacy") {
+            try {
+              const { db } = await import("./db");
+              await db.messageLog.create({
+                data: {
+                  numberId: this.numberId,
+                  direction: "IN",
+                  toFrom: String(payload.from ?? ""),
+                  content: payload.text,
+                  mediaType:
+                    payload.type !== "conversation" &&
+                    payload.type !== "extendedTextMessage"
+                      ? payload.type
+                      : null,
+                },
+              });
+            } catch {
+              // non-fatal
+            }
+          }
+
+          if (this.webhookUrl) {
+            this._sendWebhook(payload).catch(() => {});
+          }
+        }
+      }
+    );
+  }
+
+  private async _sendWebhook(payload: unknown) {
+    if (!this.webhookUrl) return;
+    try {
+      await fetch(this.webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "message", data: payload }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // silently fail
+    }
+  }
+
+  async disconnect() {
+    if (this.sock) {
+      await this.sock.logout().catch(() => {});
+      this.sock = null;
+    }
+    this.status = "disconnected";
+    this.qrDataUrl = null;
+    this.user = null;
+
+    // Remove auth files
+    const authPath = path.join(process.cwd(), this.authDirRelative);
+    if (fs.existsSync(authPath)) {
+      fs.rmSync(authPath, { recursive: true, force: true });
+    }
+
+    // Clear phone number in DB
+    if (this.numberId !== "legacy") {
+      try {
+        const { db } = await import("./db");
+        await db.waNumber.update({
+          where: { id: this.numberId },
+          data: { phoneNumber: null },
+        });
+      } catch {
+        // non-fatal
+      }
+    }
+
+    this.emit("status", { status: "disconnected" });
+  }
+
+  async sendText(to: string, text: string) {
+    if (!this.sock || this.status !== "connected") {
+      throw new Error("WhatsApp is not connected");
+    }
+    const jid = this._normalizeJid(to);
+    await this.sock.sendMessage(jid, { text });
+    this.stats.sent++;
+    this.emit("stats", { stats: this.stats });
+
+    if (this.numberId !== "legacy") {
+      try {
+        const { db } = await import("./db");
+        await db.messageLog.create({
+          data: {
+            numberId: this.numberId,
+            direction: "OUT",
+            toFrom: jid,
+            content: text,
+          },
+        });
+      } catch {
+        // non-fatal
+      }
+    }
+
+    return { success: true, to: jid };
+  }
+
+  async sendMedia(
+    to: string,
+    url: string,
+    mediaType: "image" | "video" | "document",
+    caption?: string,
+    filename?: string
+  ) {
+    if (!this.sock || this.status !== "connected") {
+      throw new Error("WhatsApp is not connected");
+    }
+    const jid = this._normalizeJid(to);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let content: any;
+    if (mediaType === "image") {
+      content = { image: { url }, caption: caption ?? "" };
+    } else if (mediaType === "video") {
+      content = { video: { url }, caption: caption ?? "" };
+    } else {
+      content = {
+        document: { url },
+        mimetype: "application/octet-stream",
+        fileName: filename ?? "document",
+        caption: caption ?? "",
+      };
+    }
+
+    await this.sock.sendMessage(jid, content);
+    this.stats.sent++;
+    this.emit("stats", { stats: this.stats });
+
+    if (this.numberId !== "legacy") {
+      try {
+        const { db } = await import("./db");
+        await db.messageLog.create({
+          data: {
+            numberId: this.numberId,
+            direction: "OUT",
+            toFrom: jid,
+            content: caption ?? null,
+            mediaType,
+          },
+        });
+      } catch {
+        // non-fatal
+      }
+    }
+
+    return { success: true, to: jid };
+  }
+
+  async getGroups(): Promise<{ id: string; name: string; participantCount: number; description: string | null }[]> {
+    if (!this.sock || this.status !== "connected") {
+      throw new Error("WhatsApp is not connected");
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const groups = await (this.sock as any).groupFetchAllParticipating() as Record<string, any>;
+    return Object.values(groups).map((g) => ({
+      id: g.id as string,
+      name: (g.subject as string) ?? g.id,
+      participantCount: (g.participants as unknown[])?.length ?? 0,
+      description: (g.desc as string) ?? null,
+    }));
+  }
+
+  private _normalizeJid(to: string): string {
+    // Already a full JID (group @g.us or contact @s.whatsapp.net)
+    if (to.includes("@")) return to;
+    // Plain phone number → personal JID
+    const cleaned = to.replace(/[^0-9]/g, "");
+    return `${cleaned}@s.whatsapp.net`;
+  }
+
+  getStatus() {
+    return {
+      status: this.status,
+      user: this.user,
+      stats: this.stats,
+      uptime: Math.floor((Date.now() - this.stats.startTime) / 1000),
+      webhookUrl: this.webhookUrl,
+      hasQr: !!this.qrDataUrl,
+      qr: this.qrDataUrl,
+    };
+  }
+}
+
+// ─── Multi-instance manager ────────────────────────────────────────────────
+
+const waClients: Map<string, WhatsAppClient> =
+  global.__waClients ?? (global.__waClients = new Map());
+
+/**
+ * Get or create a WA client for the given numberId.
+ * On first creation, loads the number from DB and auto-reconnects if auth
+ * files already exist (e.g., after a server restart).
+ */
+export async function getOrCreateWaClient(
+  numberId: string
+): Promise<WhatsAppClient> {
+  if (waClients.has(numberId)) return waClients.get(numberId)!;
+
+  const { db } = await import("./db");
+  const number = await db.waNumber.findUnique({ where: { id: numberId } });
+  if (!number) throw new Error("WA number not found");
+
+  const client = new WhatsAppClient(
+    numberId,
+    number.authDir,
+    number.webhookUrl
+  );
+  waClients.set(numberId, client);
+
+  // Auto-reconnect if auth files exist
+  const authPath = path.join(process.cwd(), number.authDir);
+  if (
+    fs.existsSync(authPath) &&
+    fs.readdirSync(authPath).some((f) => f.endsWith(".json"))
+  ) {
+    client.connect().catch(console.error);
+  }
+
+  return client;
+}
+
+export function getWaClient(numberId: string): WhatsAppClient | null {
+  return waClients.get(numberId) ?? null;
+}
+
+export function removeWaClient(numberId: string): void {
+  waClients.delete(numberId);
+}
+
+/**
+ * Find a WA client by its API key (for v1 external API calls).
+ * Returns both the client and the WaNumber record.
+ */
+export async function getClientByApiKey(apiKey: string) {
+  const { db } = await import("./db");
+  const number = await db.waNumber.findUnique({ where: { apiKey } });
+  if (!number) return null;
+
+  const client = await getOrCreateWaClient(number.id);
+  return { client, number };
+}

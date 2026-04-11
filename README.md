@@ -1,36 +1,177 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WA Dashboard
 
-## Getting Started
+Multi-user WhatsApp dashboard built with Next.js 16, Prisma 7, and Baileys.
 
-First, run the development server:
+## Login
+
+| Role  | Email           | Password  |
+|-------|-----------------|-----------|
+| Admin | admin@admin.com | Admin1234 |
+
+> Ganti password setelah pertama kali login.
+
+## Menjalankan Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> **Catatan:** Koneksi pertama ke database remote membutuhkan waktu ~30 detik. Halaman akan loading sebentar setelah server pertama kali dinyalakan.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Fitur
 
-To learn more about Next.js, take a look at the following resources:
+### Admin
+- Buat / hapus akun user
+- Monitor semua WA numbers dari semua user
+- Lihat statistik pesan (masuk/keluar)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### User
+- Tambah hingga **3 WA numbers** per akun
+- Setiap nomor punya **API key unik**
+- Setiap nomor punya **webhook URL** sendiri
+- Tab per nomor: Connection, Send, Groups, Webhook, API
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## API v1
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Base URL: `http://localhost:3000`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Auth: `Authorization: Bearer <api_key_nomor>`
+
+| Method | Endpoint           | Deskripsi                  |
+|--------|--------------------|----------------------------|
+| GET    | /api/v1/groups     | Daftar grup WA             |
+| POST   | /api/v1/send/text  | Kirim pesan teks           |
+| POST   | /api/v1/send/media | Kirim gambar/video/dokumen |
+
+**Kirim teks:**
+```bash
+curl -X POST http://localhost:3000/api/v1/send/text \
+  -H "Authorization: Bearer API_KEY_MU" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "628123456789", "text": "Halo!"}'
+```
+
+**Kirim ke grup:**
+```bash
+curl -X POST http://localhost:3000/api/v1/send/text \
+  -H "Authorization: Bearer API_KEY_MU" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "120363xxxxxx@g.us", "text": "Halo grup!"}'
+```
+
+**Kirim media:**
+```bash
+curl -X POST http://localhost:3000/api/v1/send/media \
+  -H "Authorization: Bearer API_KEY_MU" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "628123456789", "url": "https://...", "type": "image", "caption": "Caption"}'
+```
+
+---
+
+## Webhook
+
+Setiap nomor bisa dikonfigurasi dengan webhook URL. Semua tipe pesan WA didukung.
+
+### Field umum (selalu ada)
+```json
+{
+  "event": "message",
+  "data": {
+    "from": "628xxx@s.whatsapp.net",
+    "fromMe": false,
+    "id": "MSG_ID",
+    "timestamp": 1234567890,
+    "type": "conversation"
+  }
+}
+```
+
+### Teks biasa (`conversation`, `extendedTextMessage`)
+```json
+{ "type": "conversation", "text": "Halo!" }
+```
+
+### Gambar (`imageMessage`) / Video (`videoMessage`) / Stiker (`stickerMessage`)
+```json
+{
+  "type": "imageMessage",
+  "text": "caption jika ada",
+  "media": {
+    "url": "https://mmg.whatsapp.net/...",
+    "mimetype": "image/jpeg",
+    "fileSize": 123456
+  }
+}
+```
+> Video juga memiliki field `seconds`. Stiker memiliki field `isAnimated`.
+
+### Audio / Voice note (`audioMessage`)
+```json
+{
+  "type": "audioMessage",
+  "media": {
+    "url": "https://mmg.whatsapp.net/...",
+    "mimetype": "audio/ogg; codecs=opus",
+    "seconds": 12,
+    "ptt": true
+  }
+}
+```
+> `ptt: true` artinya voice note (Push To Talk).
+
+### Dokumen / File (`documentMessage`)
+```json
+{
+  "type": "documentMessage",
+  "text": "caption jika ada",
+  "media": {
+    "url": "https://mmg.whatsapp.net/...",
+    "mimetype": "application/pdf",
+    "filename": "dokumen.pdf",
+    "fileSize": 204800,
+    "title": "Judul dokumen"
+  }
+}
+```
+
+### Lokasi / Maps (`locationMessage`, `liveLocationMessage`)
+```json
+{
+  "type": "locationMessage",
+  "location": {
+    "latitude": -6.2088,
+    "longitude": 106.8456,
+    "name": "Nama tempat",
+    "address": "Alamat lengkap",
+    "isLive": false
+  }
+}
+```
+
+### Kontak (`contactMessage`, `contactsArrayMessage`)
+```json
+{
+  "type": "contactMessage",
+  "contact": {
+    "displayName": "John Doe",
+    "vcard": "BEGIN:VCARD\nVERSION:3.0\n..."
+  }
+}
+```
+
+---
+
+## Stack
+
+- **Framework:** Next.js 16.2.2 (App Router)
+- **Database:** PostgreSQL via Prisma 7.6.0 + `@prisma/adapter-pg`
+- **WhatsApp:** `@whiskeysockets/baileys`
+- **Auth:** JWT (`jose`) + HTTP-only cookie
+- **Password:** bcryptjs (cost factor 12)

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Copy, Check, BookOpen, Key, Phone, ArrowUpRight } from "lucide-react";
+import { Copy, Check, BookOpen, Key, Phone, ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -18,13 +18,13 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function CodeBlock({ code, lang = "bash" }: { code: string; lang?: string }) {
+function CodeBlock({ code }: { code: string }) {
   return (
     <div className="relative bg-black/40 rounded-xl p-4 border border-white/5">
       <div className="absolute top-2 right-2">
         <CopyButton text={code} />
       </div>
-      <pre className="text-[#25d366] text-xs font-mono overflow-x-auto pr-6">{code}</pre>
+      <pre className="text-[#25d366] text-xs font-mono overflow-x-auto pr-6 whitespace-pre-wrap break-all">{code}</pre>
     </div>
   );
 }
@@ -38,22 +38,37 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function Badge({ code, label }: { code: string; label?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="bg-red-500/20 text-red-400 text-xs font-bold px-2 py-0.5 rounded">
+        {code}
+      </span>
+      {label && <span className="text-white/40 text-xs">{label}</span>}
+    </span>
+  );
+}
+
 function Endpoint({
   method,
   path,
   description,
-  auth,
   body,
   response,
+  phpExample,
+  note,
 }: {
   method: string;
   path: string;
   description: string;
-  auth?: string;
   body?: string;
   response?: string;
+  phpExample?: string;
+  note?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"body" | "php" | "curl">("body");
+
   return (
     <div className="bg-[#0a1628] border border-white/5 rounded-2xl overflow-hidden">
       <button
@@ -70,26 +85,55 @@ function Endpoint({
           {method}
         </span>
         <code className="text-white/70 text-sm font-mono">{path}</code>
-        <span className="text-white/30 text-xs ml-2">{description}</span>
+        <span className="text-white/30 text-xs ml-2 flex-1">{description}</span>
+        {open ? <ChevronDown className="w-4 h-4 text-white/30 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-white/30 flex-shrink-0" />}
       </button>
       {open && (
-        <div className="px-5 pb-5 space-y-3 border-t border-white/5 pt-4">
-          {auth && (
-            <div>
-              <p className="text-white/40 text-xs mb-1">Authentication</p>
-              <code className="text-yellow-400 text-xs">{auth}</code>
-            </div>
+        <div className="px-5 pb-5 border-t border-white/5 pt-4 space-y-3">
+          {note && (
+            <p className="text-yellow-400/70 text-xs bg-yellow-400/5 border border-yellow-400/10 rounded-lg px-3 py-2">
+              {note}
+            </p>
           )}
-          {body && (
+          {(body || phpExample) && (
             <div>
-              <p className="text-white/40 text-xs mb-1">Request Body</p>
-              <CodeBlock code={body} lang="json" />
+              <div className="flex gap-2 mb-2">
+                {body && (
+                  <button
+                    onClick={() => setTab("body")}
+                    className={`text-xs px-3 py-1 rounded-full border transition-colors ${tab === "body" ? "border-[#25d366]/40 text-[#25d366] bg-[#25d366]/10" : "border-white/10 text-white/30 hover:text-white/60"}`}
+                  >
+                    JSON Body
+                  </button>
+                )}
+                {phpExample && (
+                  <button
+                    onClick={() => setTab("php")}
+                    className={`text-xs px-3 py-1 rounded-full border transition-colors ${tab === "php" ? "border-[#25d366]/40 text-[#25d366] bg-[#25d366]/10" : "border-white/10 text-white/30 hover:text-white/60"}`}
+                  >
+                    PHP
+                  </button>
+                )}
+                {body && (
+                  <button
+                    onClick={() => setTab("curl")}
+                    className={`text-xs px-3 py-1 rounded-full border transition-colors ${tab === "curl" ? "border-[#25d366]/40 text-[#25d366] bg-[#25d366]/10" : "border-white/10 text-white/30 hover:text-white/60"}`}
+                  >
+                    cURL
+                  </button>
+                )}
+              </div>
+              {tab === "body" && body && <CodeBlock code={body} />}
+              {tab === "php" && phpExample && <CodeBlock code={phpExample} />}
+              {tab === "curl" && body && (
+                <p className="text-white/30 text-xs italic">See cURL Examples section below.</p>
+              )}
             </div>
           )}
           {response && (
             <div>
               <p className="text-white/40 text-xs mb-1">Response</p>
-              <CodeBlock code={response} lang="json" />
+              <CodeBlock code={response} />
             </div>
           )}
         </div>
@@ -111,154 +155,309 @@ export default function ApiDocsPage() {
           API Documentation
         </h1>
         <p className="text-white/40 text-sm mt-1">
-          REST API for sending WhatsApp messages via your connected numbers
+          REST API kompatibel dengan WatZap WABA Unofficial — format request &amp; response sama persis
         </p>
       </div>
 
-      {/* API Key note */}
-      <div className="bg-[#25d366]/5 border border-[#25d366]/20 rounded-2xl p-5 mb-8 flex items-start gap-3">
-        <Key className="w-5 h-5 text-[#25d366] flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-white font-medium text-sm">Per-Number API Keys</p>
-          <p className="text-white/50 text-xs mt-1">
-            Each WA number has its own API key. Go to{" "}
-            <Link href="/numbers" className="text-[#25d366] hover:underline">
-              My Numbers
-            </Link>
-            {" "}→ Manage → API tab to find your keys.
-          </p>
-          <Link
-            href="/numbers"
-            className="inline-flex items-center gap-1.5 mt-2 text-xs text-[#25d366] hover:underline"
-          >
-            <Phone className="w-3.5 h-3.5" />
-            View My Numbers
-            <ArrowUpRight className="w-3 h-3" />
-          </Link>
-        </div>
+      {/* Migration note */}
+      <div className="bg-[#25d366]/5 border border-[#25d366]/20 rounded-2xl p-5 mb-8">
+        <p className="text-white font-medium text-sm mb-1">Migrasi dari WatZap?</p>
+        <p className="text-white/50 text-xs leading-relaxed">
+          Ganti hanya <strong className="text-white/70">3 hal</strong> di config aplikasimu:
+        </p>
+        <ul className="mt-2 space-y-1">
+          <li className="text-white/50 text-xs flex gap-2">
+            <span className="text-[#25d366]">1.</span>
+            <span><code className="text-white/70">url</code> → <code className="text-[#25d366]">{baseUrl}/api/v1/...</code></span>
+          </li>
+          <li className="text-white/50 text-xs flex gap-2">
+            <span className="text-[#25d366]">2.</span>
+            <span><code className="text-white/70">api_key</code> → isi bebas (atau samakan dengan number_key)</span>
+          </li>
+          <li className="text-white/50 text-xs flex gap-2">
+            <span className="text-[#25d366]">3.</span>
+            <span><code className="text-white/70">number_key</code> → API Key dari halaman Numbers di dashboard ini</span>
+          </li>
+        </ul>
+        <Link
+          href="/numbers"
+          className="inline-flex items-center gap-1.5 mt-3 text-xs text-[#25d366] hover:underline"
+        >
+          <Phone className="w-3.5 h-3.5" />
+          Lihat API Key Nomor Saya
+          <ArrowUpRight className="w-3 h-3" />
+        </Link>
       </div>
 
       {/* Base URL */}
       <Section title="Base URL">
         <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
           <div className="flex items-center gap-2">
-            <code className="text-white font-mono text-sm flex-1">{baseUrl}</code>
-            <CopyButton text={baseUrl} />
+            <code className="text-white font-mono text-sm flex-1">{baseUrl}/api/v1</code>
+            <CopyButton text={`${baseUrl}/api/v1`} />
           </div>
         </div>
       </Section>
 
       {/* Authentication */}
-      <Section title="Authentication">
+      <Section title="Autentikasi">
         <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5 space-y-3">
           <p className="text-white/60 text-sm">
-            All v1 API calls require a <code className="text-[#25d366]">Bearer</code> token using the number&apos;s API key:
+            Semua request menggunakan <code className="text-[#25d366]">api_key</code> dan{" "}
+            <code className="text-[#25d366]">number_key</code> di <strong className="text-white/80">request body</strong> (bukan header).
           </p>
-          <CodeBlock code={`Authorization: Bearer YOUR_NUMBER_API_KEY`} />
-          <p className="text-white/30 text-xs">
-            Each WA number has a unique API key. This key identifies which phone number will be used to send the message.
-          </p>
+          <CodeBlock code={`{
+  "api_key":    "isi bebas atau samakan dengan number_key",
+  "number_key": "XXXXXX-YYYYYY-ZZZZZZ"  ← ambil dari tab API di halaman Numbers
+}`} />
+          <div className="flex items-start gap-2 pt-1">
+            <Key className="w-3.5 h-3.5 text-[#25d366] flex-shrink-0 mt-0.5" />
+            <p className="text-white/30 text-xs">
+              <code className="text-white/60">number_key</code> menentukan nomor WA mana yang digunakan untuk mengirim.
+              Setiap nomor WA memiliki key yang berbeda.
+            </p>
+          </div>
         </div>
       </Section>
 
-      {/* Send endpoints */}
-      <Section title="Public API v1">
+      {/* Error Codes */}
+      <Section title="Kode Error">
+        <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
+          <div className="space-y-2">
+            {[
+              { code: "200", label: "Success", desc: "Pesan berhasil dikirim" },
+              { code: "1002", label: "Invalid API Key", desc: "api_key tidak ditemukan" },
+              { code: "1003", label: "Invalid Number Key", desc: "number_key tidak valid" },
+              { code: "1004", label: "Not Connected", desc: "WhatsApp belum terkoneksi" },
+              { code: "1005", label: "Fatal Error", desc: "Gagal kirim, periksa detail pesan error" },
+              { code: "1006", label: "Other Error", desc: "Field tidak lengkap atau error lainnya" },
+            ].map((e) => (
+              <div key={e.code} className="flex items-center gap-3">
+                <Badge code={e.code} />
+                <span className="text-white/60 text-xs w-32 flex-shrink-0">{e.label}</span>
+                <span className="text-white/30 text-xs">{e.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* Endpoints */}
+      <Section title="Endpoint API v1">
         <div className="space-y-2">
+
+          {/* checking_key */}
           <Endpoint
-            method="GET"
+            method="POST"
+            path="/api/v1/checking_key"
+            description="Cek validitas API key"
+            body={`{
+  "api_key": "XXXXXX-YYYYYY-ZZZZZZ"
+}`}
+            phpExample={`$data = ["api_key" => config('wa.wa_api_key')];
+$curl = curl_init();
+curl_setopt_array($curl, [
+  CURLOPT_URL            => '${baseUrl}/api/v1/checking_key',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_CUSTOMREQUEST  => 'POST',
+  CURLOPT_POSTFIELDS     => json_encode($data),
+  CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+]);
+$response = json_decode(curl_exec($curl));
+curl_close($curl);`}
+            response={`{
+  "status": true,
+  "message": "Successfully",
+  "data": {
+    "id": "user-id",
+    "name": "Nama User",
+    "email": "email@domain.com",
+    "licenses_key": [
+      {
+        "id": "number-id",
+        "key": "XXXXXX-YYYYYY-ZZZZZZ",
+        "wa_number": "628123456789",
+        "is_connected": true
+      }
+    ]
+  }
+}`}
+          />
+
+          {/* send_message */}
+          <Endpoint
+            method="POST"
+            path="/api/v1/send_message"
+            description="Kirim pesan teks"
+            body={`{
+  "api_key":    "XXXXXX-YYYYYY-ZZZZZZ",
+  "number_key": "XXXXXX-YYYYYY-ZZZZZZ",
+  "phone_no":   "628123456789",
+  "message":    "Halo dari WA Dashboard!"
+}`}
+            phpExample={`$data = [
+  "api_key"    => config('wa.wa_api_key'),
+  "number_key" => config('wa.wa_number_key'),
+  "phone_no"   => "628123456789",
+  "message"    => "Halo dari WA Dashboard!",
+];
+$curl = curl_init();
+curl_setopt_array($curl, [
+  CURLOPT_URL            => '${baseUrl}/api/v1/send_message',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_CUSTOMREQUEST  => 'POST',
+  CURLOPT_POSTFIELDS     => json_encode($data),
+  CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+]);
+$response = json_decode(curl_exec($curl));
+curl_close($curl);`}
+            response={`{
+  "status": "200",
+  "message": "Message sent successfully",
+  "ack": "successfully",
+  "phone_number": "628123456789",
+  "message_sent": "Halo dari WA Dashboard!"
+}`}
+          />
+
+          {/* send_image_url */}
+          <Endpoint
+            method="POST"
+            path="/api/v1/send_image_url"
+            description="Kirim gambar dengan URL"
+            body={`{
+  "api_key":          "XXXXXX-YYYYYY-ZZZZZZ",
+  "number_key":       "XXXXXX-YYYYYY-ZZZZZZ",
+  "phone_no":         "628123456789",
+  "url":              "https://example.com/foto.jpg",
+  "message":          "Caption gambar (opsional)",
+  "separate_caption": "0"
+}
+
+// separate_caption:
+//   "0" = caption langsung di gambar (default)
+//   "1" = kirim gambar dulu, lalu teks terpisah`}
+            phpExample={`$data = [
+  "api_key"          => config('wa.wa_api_key'),
+  "number_key"       => config('wa.wa_number_key'),
+  "phone_no"         => "628123456789",
+  "url"              => "https://example.com/foto.jpg",
+  "message"          => "Caption gambar",
+  "separate_caption" => "0",
+];
+$curl = curl_init();
+curl_setopt_array($curl, [
+  CURLOPT_URL            => '${baseUrl}/api/v1/send_image_url',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_CUSTOMREQUEST  => 'POST',
+  CURLOPT_POSTFIELDS     => json_encode($data),
+  CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+]);
+$response = json_decode(curl_exec($curl));
+curl_close($curl);`}
+            response={`{
+  "status": "200",
+  "message": "Successfully",
+  "ack": "successfully"
+}`}
+          />
+
+          {/* send_file_url */}
+          <Endpoint
+            method="POST"
+            path="/api/v1/send_file_url"
+            description="Kirim file / dokumen / video"
+            note="Tipe file dideteksi otomatis dari ekstensi URL. Video (mp4/mkv/avi/mov/webm) → video, selainnya → document."
+            body={`{
+  "api_key":    "XXXXXX-YYYYYY-ZZZZZZ",
+  "number_key": "XXXXXX-YYYYYY-ZZZZZZ",
+  "phone_no":   "628123456789",
+  "url":        "https://example.com/laporan.pdf",
+  "filename":   "Laporan.pdf"
+}
+
+// filename opsional — jika tidak diisi, diambil dari URL`}
+            phpExample={`$data = [
+  "api_key"    => config('wa.wa_api_key'),
+  "number_key" => config('wa.wa_number_key'),
+  "phone_no"   => "628123456789",
+  "url"        => "https://example.com/laporan.pdf",
+  "filename"   => "Laporan.pdf",
+];
+$curl = curl_init();
+curl_setopt_array($curl, [
+  CURLOPT_URL            => '${baseUrl}/api/v1/send_file_url',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_CUSTOMREQUEST  => 'POST',
+  CURLOPT_POSTFIELDS     => json_encode($data),
+  CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+]);
+$response = json_decode(curl_exec($curl));
+curl_close($curl);`}
+            response={`{
+  "status": "200",
+  "message": "Successfully",
+  "ack": "successfully"
+}`}
+          />
+
+          {/* groups */}
+          <Endpoint
+            method="POST"
             path="/api/v1/groups"
-            description="Get all groups the number is in"
-            auth="Authorization: Bearer <your_number_api_key>"
+            description="Daftar grup WhatsApp"
+            note="Menggunakan auth body sama seperti endpoint lain."
+            body={`{
+  "api_key":    "XXXXXX-YYYYYY-ZZZZZZ",
+  "number_key": "XXXXXX-YYYYYY-ZZZZZZ"
+}`}
             response={`[
   {
     "id": "120363xxxxxx@g.us",
-    "name": "Group Name",
+    "name": "Nama Grup",
     "participantCount": 42,
-    "description": "Group description"
+    "description": "Deskripsi grup"
   }
 ]`}
           />
-          <Endpoint
-            method="POST"
-            path="/api/v1/send/text"
-            description="Send a text message (to person or group)"
-            auth="Authorization: Bearer <your_number_api_key>"
-            body={`{
-  "to": "628123456789",
-  "text": "Hello from WA Dashboard!"
-}
 
-// Send to group — use group JID:
-{
-  "to": "120363xxxxxx@g.us",
-  "text": "Hello group!"
-}`}
-            response={`{
-  "success": true,
-  "to": "628123456789@s.whatsapp.net",
-  "numberId": "clx...",
-  "label": "Customer Support"
-}`}
-          />
-          <Endpoint
-            method="POST"
-            path="/api/v1/send/media"
-            description="Send image, video, or document"
-            auth="Authorization: Bearer <your_number_api_key>"
-            body={`{
-  "to": "628123456789",
-  "url": "https://example.com/image.jpg",
-  "type": "image",
-  "caption": "Check this out!"
-}
-
-// type: "image" | "video" | "document"
-// For document: add "filename": "report.pdf"`}
-            response={`{
-  "success": true,
-  "to": "628123456789@s.whatsapp.net"
-}`}
-          />
         </div>
       </Section>
 
-      {/* cURL examples */}
-      <Section title="cURL Examples">
-        <div className="space-y-4">
-          <div>
-            <p className="text-white/50 text-xs mb-2">Send text message:</p>
-            <CodeBlock
-              code={`curl -X POST ${baseUrl}/api/v1/send/text \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"to": "628123456789", "text": "Hello!"}'`}
-            />
-          </div>
-          <div>
-            <p className="text-white/50 text-xs mb-2">Send image:</p>
-            <CodeBlock
-              code={`curl -X POST ${baseUrl}/api/v1/send/media \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"to": "628123456789", "url": "https://example.com/photo.jpg", "type": "image", "caption": "Hi"}'`}
-            />
+      {/* Legacy endpoints */}
+      <Section title="Legacy Endpoint (lama)">
+        <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5 space-y-3">
+          <p className="text-white/40 text-xs">
+            Endpoint lama masih berjalan. Auth menggunakan header <code className="text-yellow-400">Authorization: Bearer &lt;api_key&gt;</code>.
+            Direkomendasikan migrasi ke endpoint baru di atas.
+          </p>
+          <div className="space-y-1 text-xs font-mono">
+            <div className="flex gap-3">
+              <span className="bg-green-500/20 text-green-400 text-xs font-bold px-2 py-0.5 rounded flex-shrink-0">POST</span>
+              <code className="text-white/40">/api/v1/send/text</code>
+              <span className="text-white/20">body: {`{ to, text }`}</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="bg-green-500/20 text-green-400 text-xs font-bold px-2 py-0.5 rounded flex-shrink-0">POST</span>
+              <code className="text-white/40">/api/v1/send/media</code>
+              <span className="text-white/20">body: {`{ to, url, type, caption }`}</span>
+            </div>
           </div>
         </div>
       </Section>
 
       {/* Webhook */}
-      <Section title="Webhook (Incoming Messages)">
+      <Section title="Webhook (Pesan Masuk)">
         <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5 space-y-3">
           <p className="text-white/60 text-sm">
-            Configure a webhook URL per number to receive incoming messages.
-            Go to a number&apos;s <strong className="text-white/80">Webhook</strong> tab to set it up.
+            Set URL webhook per nomor di tab <strong className="text-white/80">Webhook</strong> untuk menerima pesan masuk.
           </p>
-          <p className="text-white/40 text-xs font-semibold uppercase tracking-wider">Payload sent to your webhook:</p>
+          <p className="text-white/40 text-xs font-semibold uppercase tracking-wider">Payload yang dikirim ke webhook kamu:</p>
           <CodeBlock
             code={`POST https://your-server.com/webhook
 Content-Type: application/json
 
-// Text message
+// Pesan teks
 {
   "event": "message",
   "data": {
@@ -267,16 +466,16 @@ Content-Type: application/json
     "id": "msg-id",
     "timestamp": 1234567890,
     "type": "conversation",
-    "text": "Hello!"
+    "text": "Halo!"
   }
 }
 
-// Image / Video / Sticker
+// Gambar / Video / Sticker
 {
   "event": "message",
   "data": {
     "type": "imageMessage",
-    "text": "caption here or null",
+    "text": "caption atau null",
     "media": {
       "url": "https://mmg.whatsapp.net/...",
       "mimetype": "image/jpeg",
@@ -294,25 +493,25 @@ Content-Type: application/json
   }
 }
 
-// Document / File
+// Dokumen / File
 {
   "event": "message",
   "data": {
     "type": "documentMessage",
-    "media": { "url": "...", "mimetype": "application/pdf", "filename": "report.pdf", "fileSize": 204800 }
+    "media": { "url": "...", "mimetype": "application/pdf", "filename": "laporan.pdf", "fileSize": 204800 }
   }
 }
 
-// Location / Maps
+// Lokasi
 {
   "event": "message",
   "data": {
     "type": "locationMessage",
-    "location": { "latitude": -6.2088, "longitude": 106.8456, "name": "Jakarta", "address": "..." }
+    "location": { "latitude": -8.6705, "longitude": 115.2126, "name": "Bali", "address": "..." }
   }
 }
 
-// Contact card
+// Kontak
 {
   "event": "message",
   "data": {
@@ -324,18 +523,43 @@ Content-Type: application/json
         </div>
       </Section>
 
-      {/* Error format */}
-      <Section title="Error Responses">
-        <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-white/40 text-xs mb-2">Success (200)</p>
-              <CodeBlock code={`{ "success": true, "to": "628...@s.whatsapp.net" }`} />
-            </div>
-            <div>
-              <p className="text-white/40 text-xs mb-2">Error (4xx/5xx)</p>
-              <CodeBlock code={`{ "error": "WhatsApp is not connected" }`} />
-            </div>
+      {/* cURL Examples */}
+      <Section title="cURL Examples">
+        <div className="space-y-4">
+          <div>
+            <p className="text-white/50 text-xs mb-2">Kirim pesan teks:</p>
+            <CodeBlock
+              code={`curl -X POST ${baseUrl}/api/v1/send_message \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "api_key":    "XXXXXX-YYYYYY-ZZZZZZ",
+    "number_key": "XXXXXX-YYYYYY-ZZZZZZ",
+    "phone_no":   "628123456789",
+    "message":    "Halo!"
+  }'`}
+            />
+          </div>
+          <div>
+            <p className="text-white/50 text-xs mb-2">Kirim gambar:</p>
+            <CodeBlock
+              code={`curl -X POST ${baseUrl}/api/v1/send_image_url \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "api_key":    "XXXXXX-YYYYYY-ZZZZZZ",
+    "number_key": "XXXXXX-YYYYYY-ZZZZZZ",
+    "phone_no":   "628123456789",
+    "url":        "https://example.com/foto.jpg",
+    "message":    "Caption gambar"
+  }'`}
+            />
+          </div>
+          <div>
+            <p className="text-white/50 text-xs mb-2">Cek API key:</p>
+            <CodeBlock
+              code={`curl -X POST ${baseUrl}/api/v1/checking_key \\
+  -H "Content-Type: application/json" \\
+  -d '{"api_key": "XXXXXX-YYYYYY-ZZZZZZ"}'`}
+            />
           </div>
         </div>
       </Section>

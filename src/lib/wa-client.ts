@@ -160,6 +160,30 @@ export class WhatsAppClient {
     this.listeners.delete(fn);
   }
 
+  /** Persist auth files to DB so any Lambda instance can restore the session. */
+  private async _backupAuthStateToDb(): Promise<void> {
+    if (this.numberId === "legacy") return;
+    try {
+      const authPath = getAuthPath(this.authDirRelative);
+      if (!fs.existsSync(authPath)) return;
+      const files = fs.readdirSync(authPath).filter((f) => f.endsWith(".json"));
+      if (files.length === 0) return;
+      const authData: Record<string, string> = {};
+      for (const file of files) {
+        try {
+          authData[file] = fs.readFileSync(path.join(authPath, file), "utf-8");
+        } catch { /* skip */ }
+      }
+      const { db } = await import("./db");
+      await db.waNumber.update({
+        where: { id: this.numberId },
+        data: { authState: authData },
+      });
+    } catch {
+      // non-fatal — backup failure must not break the connection
+    }
+  }
+
   async connect() {
     if (this.status === "connecting" || this.status === "connected") return;
     this.status = "connecting";
@@ -184,7 +208,10 @@ export class WhatsAppClient {
     });
 
     this.sock = sock;
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", async () => {
+      await saveCreds();
+      void this._backupAuthStateToDb();
+    });
 
     sock.ev.on(
       "connection.update",
@@ -436,12 +463,29 @@ export async function getOrCreateWaClient(
   );
   waClients.set(numberId, client);
 
-  // Auto-reconnect if auth files exist
   const authPath = getAuthPath(number.authDir);
-  if (
+  let hasAuth =
     fs.existsSync(authPath) &&
-    fs.readdirSync(authPath).some((f) => f.endsWith(".json"))
-  ) {
+    fs.readdirSync(authPath).some((f) => f.endsWith(".json"));
+
+  if (!hasAuth && number.authState) {
+    // Cold Lambda: /tmp is empty but DB has the session backup — restore it.
+    try {
+      fs.mkdirSync(authPath, { recursive: true });
+      const stored = number.authState as Record<string, string>;
+      for (const [filename, content] of Object.entries(stored)) {
+        if (filename.endsWith(".json")) {
+          fs.writeFileSync(path.join(authPath, filename), content, "utf-8");
+        }
+      }
+      hasAuth = true;
+    } catch {
+      // non-fatal
+    }
+  }
+
+  // Auto-reconnect if auth files are available (local or restored from DB)
+  if (hasAuth) {
     client.connect().catch(console.error);
   }
 
@@ -467,4 +511,40 @@ export async function getClientByApiKey(apiKey: string) {
 
   const client = await getOrCreateWaClient(number.id);
   return { client, number };
+}
+
+/**
+ * Wait up to `timeoutMs` for a client to reach "connected" status.
+ * Returns true if connected, false if still disconnected or timed out.
+ * Useful on cold Lambdas where getOrCreateWaClient kicks off a reconnect
+ * from the DB-backed auth state but the socket isn't open yet.
+ */
+export function waitForConnected(
+  client: WhatsAppClient,
+  timeoutMs = 15_000
+): Promise<boolean> {
+  if (client.status === "connected") return Promise.resolve(true);
+  if (client.status === "disconnected") return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      client.unsubscribe(listener);
+      resolve(false);
+    }, timeoutMs);
+
+    const listener = (data: Record<string, unknown>) => {
+      if (data.event !== "status") return;
+      if (data.status === "connected") {
+        clearTimeout(timer);
+        client.unsubscribe(listener);
+        resolve(true);
+      } else if (data.status === "disconnected") {
+        clearTimeout(timer);
+        client.unsubscribe(listener);
+        resolve(false);
+      }
+    };
+
+    client.subscribe(listener);
+  });
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getClientByApiKey } from "@/lib/wa-client";
+import { getClientByApiKey, waitForConnected } from "@/lib/wa-client";
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("Authorization");
@@ -28,6 +28,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (client.status !== "connected") {
+      const ok = await waitForConnected(client, 15_000);
+      if (!ok) return NextResponse.json({ error: "WhatsApp is not connected" }, { status: 400 });
+    }
     const result = await client.sendText(to, text);
     return NextResponse.json({ ...result, numberId: number.id, label: number.label });
   } catch (err) {

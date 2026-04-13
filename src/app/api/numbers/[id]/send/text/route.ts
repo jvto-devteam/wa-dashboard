@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getOrCreateWaClient } from "@/lib/wa-client";
+import { getOrCreateWaClient, waitForConnected } from "@/lib/wa-client";
 
 export async function POST(
   req: NextRequest,
@@ -27,6 +27,10 @@ export async function POST(
     }
 
     const client = await getOrCreateWaClient(id);
+    if (client.status !== "connected") {
+      const ok = await waitForConnected(client, 15_000);
+      if (!ok) return NextResponse.json({ error: "WhatsApp is not connected" }, { status: 400 });
+    }
     const result = await client.sendText(to, text);
     return NextResponse.json(result);
   } catch (err) {

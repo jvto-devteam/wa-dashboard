@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  BarChart3, Users, Phone, MessageSquare, Wifi, WifiOff,
+  BarChart3, Users, Phone, Wifi, WifiOff,
   Loader2, RefreshCw, Activity,
 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
@@ -13,7 +13,6 @@ interface OverviewData {
     totalUsers: number;
     totalNumbers: number;
     connectedNumbers: number;
-    totalMessages: number;
   };
   numbers: {
     id: string;
@@ -21,21 +20,7 @@ interface OverviewData {
     phoneNumber: string | null;
     status: ConnectionStatus;
     apiKey: string;
-    _count: { messages: number };
     user: { name: string; email: string };
-  }[];
-  recentMessages: {
-    id: string;
-    direction: "IN" | "OUT";
-    toFrom: string;
-    content: string | null;
-    mediaType: string | null;
-    createdAt: string;
-    number: {
-      label: string;
-      phoneNumber: string | null;
-      user: { name: string };
-    };
   }[];
 }
 
@@ -117,15 +102,14 @@ export default function AdminOverviewPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-8 lg:grid-cols-4">
+      <div className="grid grid-cols-3 gap-4 mb-8">
         <StatCard label="Total Users" value={data.stats.totalUsers} icon={Users} accent="bg-blue-500/10" />
         <StatCard label="WA Numbers" value={data.stats.totalNumbers} icon={Phone} accent="bg-[#25d366]/10" />
         <StatCard label="Connected" value={data.stats.connectedNumbers} icon={Wifi} accent="bg-purple-500/10" />
-        <StatCard label="Total Messages" value={data.stats.totalMessages} icon={MessageSquare} accent="bg-orange-500/10" />
       </div>
 
       {/* Numbers table */}
-      <div className="bg-[#0a1628] border border-white/5 rounded-2xl mb-6">
+      <div className="bg-[#0a1628] border border-white/5 rounded-2xl">
         <div className="px-6 py-4 border-b border-white/5">
           <h2 className="text-white font-semibold flex items-center gap-2">
             <Activity className="w-4 h-4 text-[#25d366]" />
@@ -155,47 +139,6 @@ export default function AdminOverviewPage() {
                     {n.phoneNumber && ` · +${n.phoneNumber}`}
                   </p>
                 </div>
-                <div className="text-right text-xs text-white/30">
-                  <p>{n._count.messages} messages</p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Recent messages */}
-      <div className="bg-[#0a1628] border border-white/5 rounded-2xl">
-        <div className="px-6 py-4 border-b border-white/5">
-          <h2 className="text-white font-semibold">Recent Messages</h2>
-        </div>
-        <div className="divide-y divide-white/5">
-          {data.recentMessages.length === 0 ? (
-            <div className="py-10 text-center text-white/30 text-sm">No messages yet</div>
-          ) : (
-            data.recentMessages.map((msg) => (
-              <div key={msg.id} className="px-6 py-3 flex items-start gap-3">
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 flex-shrink-0 ${
-                    msg.direction === "IN"
-                      ? "bg-blue-500/20 text-blue-400"
-                      : "bg-[#25d366]/20 text-[#25d366]"
-                  }`}
-                >
-                  {msg.direction}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white/70 text-sm truncate">
-                    {msg.content ?? `[${msg.mediaType ?? "media"}]`}
-                  </p>
-                  <p className="text-white/30 text-xs">
-                    {msg.number.label} · {msg.number.user.name} ·{" "}
-                    {msg.direction === "IN" ? `from ${msg.toFrom}` : `to ${msg.toFrom}`}
-                  </p>
-                </div>
-                <span className="text-white/20 text-xs flex-shrink-0">
-                  {new Date(msg.createdAt).toLocaleTimeString()}
-                </span>
               </div>
             ))
           )}

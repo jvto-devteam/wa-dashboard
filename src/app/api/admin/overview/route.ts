@@ -8,25 +8,13 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const [totalUsers, totalNumbers, totalMessages, recentMessages] =
-    await Promise.all([
-      db.user.count(),
-      db.waNumber.count(),
-      db.messageLog.count(),
-      db.messageLog.findMany({
-        take: 20,
-        orderBy: { createdAt: "desc" },
-        include: {
-          number: { select: { label: true, phoneNumber: true, user: { select: { name: true } } } },
-        },
-      }),
-    ]);
+  const [totalUsers, totalNumbers] = await Promise.all([
+    db.user.count(),
+    db.waNumber.count(),
+  ]);
 
   const numbers = await db.waNumber.findMany({
-    include: {
-      user: { select: { name: true, email: true } },
-      _count: { select: { messages: true } },
-    },
+    include: { user: { select: { name: true, email: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -46,9 +34,7 @@ export async function GET() {
       totalUsers,
       totalNumbers,
       connectedNumbers: connectedCount,
-      totalMessages,
     },
     numbers: enrichedNumbers,
-    recentMessages,
   });
 }

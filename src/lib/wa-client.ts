@@ -270,28 +270,6 @@ export class WhatsAppClient {
           this.emit("message", { message: payload });
           this.emit("stats", { stats: this.stats });
 
-          // Log incoming message to DB
-          if (this.numberId !== "legacy") {
-            try {
-              const { db } = await import("./db");
-              await db.messageLog.create({
-                data: {
-                  numberId: this.numberId,
-                  direction: "IN",
-                  toFrom: String(payload.from ?? ""),
-                  content: payload.text,
-                  mediaType:
-                    payload.type !== "conversation" &&
-                    payload.type !== "extendedTextMessage"
-                      ? payload.type
-                      : null,
-                },
-              });
-            } catch {
-              // non-fatal
-            }
-          }
-
           if (this.webhookUrl) {
             this._sendWebhook(payload).catch(() => {});
           }
@@ -353,23 +331,6 @@ export class WhatsAppClient {
     await this.sock.sendMessage(jid, { text });
     this.stats.sent++;
     this.emit("stats", { stats: this.stats });
-
-    if (this.numberId !== "legacy") {
-      try {
-        const { db } = await import("./db");
-        await db.messageLog.create({
-          data: {
-            numberId: this.numberId,
-            direction: "OUT",
-            toFrom: jid,
-            content: text,
-          },
-        });
-      } catch {
-        // non-fatal
-      }
-    }
-
     return { success: true, to: jid };
   }
 
@@ -403,24 +364,6 @@ export class WhatsAppClient {
     await this.sock.sendMessage(jid, content);
     this.stats.sent++;
     this.emit("stats", { stats: this.stats });
-
-    if (this.numberId !== "legacy") {
-      try {
-        const { db } = await import("./db");
-        await db.messageLog.create({
-          data: {
-            numberId: this.numberId,
-            direction: "OUT",
-            toFrom: jid,
-            content: caption ?? null,
-            mediaType,
-          },
-        });
-      } catch {
-        // non-fatal
-      }
-    }
-
     return { success: true, to: jid };
   }
 

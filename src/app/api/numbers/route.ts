@@ -22,7 +22,19 @@ export async function GET() {
   try {
     const numbers = await db.waNumber.findMany({
       where: userId ? { userId } : undefined,
-      include: { user: { select: { id: true, name: true, email: true } } },
+      select: {
+        id: true,
+        userId: true,
+        label: true,
+        apiKey: true,
+        webhookUrl: true,
+        phoneNumber: true,
+        authDir: true,
+        createdAt: true,
+        updatedAt: true,
+        // authState & connectionActiveAt excluded — can be hundreds of KB per row
+        user: { select: { id: true, name: true, email: true } },
+      },
       orderBy: { createdAt: "asc" },
     });
 

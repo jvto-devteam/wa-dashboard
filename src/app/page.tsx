@@ -2,13 +2,14 @@
 
 import { useAuth } from "@/components/providers";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Phone,
   Users,
   BarChart3,
   BookOpen,
   ArrowUpRight,
-  MessageSquare,
+  Wifi,
   Shield,
 } from "lucide-react";
 
@@ -70,6 +71,23 @@ function StatCard({
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [stats, setStats] = useState({ total: 0, connected: 0 });
+
+  useEffect(() => {
+    if (user?.role !== "ADMIN") {
+      fetch("/api/numbers")
+        .then((r) => r.json())
+        .then((data: { status: string }[]) => {
+          if (Array.isArray(data)) {
+            setStats({
+              total: data.length,
+              connected: data.filter((n) => n.status === "connected").length,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user]);
 
   if (!user) {
     return (
@@ -131,23 +149,17 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <StatCard
           label="WA Numbers"
-          value="—"
+          value={`${stats.total} / 3`}
           icon={Phone}
           accent="bg-[#25d366]/10"
         />
         <StatCard
-          label="Messages Sent"
-          value="—"
-          icon={MessageSquare}
-          accent="bg-blue-500/10"
-        />
-        <StatCard
-          label="Active Connections"
-          value="—"
-          icon={BarChart3}
+          label="Connected"
+          value={stats.connected}
+          icon={Wifi}
           accent="bg-purple-500/10"
         />
       </div>

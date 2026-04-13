@@ -84,10 +84,15 @@ export default function NumbersPage() {
     if (!confirm("Delete this WA number? This will disconnect and remove all data.")) return;
     setDeleting(id);
     try {
-      await fetch(`/api/numbers/${id}`, { method: "DELETE" });
-      fetchNumbers();
+      const res = await fetch(`/api/numbers/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? `Delete failed (${res.status})`);
+      } else {
+        await fetchNumbers();
+      }
     } catch {
-      // ignore
+      setError("Network error saat menghapus");
     } finally {
       setDeleting(null);
     }
@@ -97,6 +102,14 @@ export default function NumbersPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Global error */}
+      {error && !adding && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <p className="text-red-400 text-sm">{error}</p>
+          <button onClick={() => setError("")} className="text-red-400/50 hover:text-red-400 text-xs ml-4">✕</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>

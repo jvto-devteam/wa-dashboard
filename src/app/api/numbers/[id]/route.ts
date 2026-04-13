@@ -35,22 +35,28 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const number = await getAuthorizedNumber(id, session.userId, session.role);
-  if (!number) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Disconnect and clean up
-  const client = getWaClient(id);
-  if (client) {
-    await client.disconnect().catch(() => {});
-    removeWaClient(id);
+  try {
+    const number = await getAuthorizedNumber(id, session.userId, session.role);
+    if (!number) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // Disconnect and clean up client
+    const client = getWaClient(id);
+    if (client) {
+      await client.disconnect().catch(() => {});
+      removeWaClient(id);
+    }
+
+    // Remove auth directory
+    const authPath = path.join(process.cwd(), number.authDir);
+    if (fs.existsSync(authPath)) {
+      fs.rmSync(authPath, { recursive: true, force: true });
+    }
+
+    await db.waNumber.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/numbers/:id]", err);
+    return NextResponse.json({ error: "Gagal menghapus, coba lagi" }, { status: 503 });
   }
-
-  // Remove auth directory
-  const authPath = path.join(process.cwd(), number.authDir);
-  if (fs.existsSync(authPath)) {
-    fs.rmSync(authPath, { recursive: true, force: true });
-  }
-
-  await db.waNumber.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
 }

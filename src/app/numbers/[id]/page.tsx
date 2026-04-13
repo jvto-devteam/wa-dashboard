@@ -51,14 +51,29 @@ function CopyButton({ text }: { text: string }) {
 }
 
 // ─── Connection Tab ───────────────────────────────────────────────────────────
-function ConnectionTab({ numberId, info, reload }: { numberId: string; info: NumberInfo; reload: () => void }) {
+function ConnectionTab({
+  numberId, info, reload, onConnect,
+}: {
+  numberId: string;
+  info: NumberInfo;
+  reload: () => void;
+  onConnect: () => void;
+}) {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  const connect = async () => {
+  // Clear spinner once QR or connected state arrives via SSE
+  useEffect(() => {
+    if (info.qr || info.status === "connected" || info.status === "disconnected") {
+      setConnecting(false);
+    }
+  }, [info.qr, info.status]);
+
+  const connect = () => {
     setConnecting(true);
-    await fetch(`/api/numbers/${numberId}/connect`, { method: "POST" });
-    setConnecting(false);
+    // Reopen SSE — this creates a fresh Lambda request so Baileys WebSocket
+    // events (QR, connection.open) can fire while the SSE is active.
+    onConnect();
   };
 
   const disconnect = async () => {
@@ -643,6 +658,9 @@ export default function NumberDetailPage() {
   const [sendTo, setSendTo] = useState("");
   const [info, setInfo] = useState<NumberInfo | null>(null);
   const esRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref pattern: always points to the latest openSSE closure (avoids stale captures)
+  const openSSERef = useRef<() => void>(() => {});
 
   const handleSendToGroup = (jid: string) => {
     setSendTo(jid);
@@ -657,9 +675,10 @@ export default function NumberDetailPage() {
     } catch { /* ignore */ }
   }, [id, router]);
 
-  // SSE for real-time updates
-  useEffect(() => {
-    fetchInfo();
+  // Keep ref up to date with latest closures on every render
+  openSSERef.current = () => {
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    esRef.current?.close();
 
     const es = new EventSource(`/api/numbers/${id}/sse`);
     esRef.current = es;
@@ -682,9 +701,19 @@ export default function NumberDetailPage() {
 
     es.onerror = () => {
       es.close();
+      // Auto-reconnect after 3 s — handles Vercel's maxDuration timeout
+      // so QR scanning continues even if the SSE connection cycles.
+      reconnectTimerRef.current = setTimeout(() => openSSERef.current(), 3000);
     };
+  };
+
+  // SSE for real-time updates
+  useEffect(() => {
+    fetchInfo();
+    openSSERef.current();
 
     return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       esRef.current?.close();
     };
   }, [id, fetchInfo]);
@@ -748,7 +777,7 @@ export default function NumberDetailPage() {
 
       {/* Tab content */}
       {activeTab === "connection" && (
-        <ConnectionTab numberId={id} info={info} reload={fetchInfo} />
+        <ConnectionTab numberId={id} info={info} reload={fetchInfo} onConnect={() => openSSERef.current()} />
       )}
       {activeTab === "send" && (
         <SendTab numberId={id} connected={info.status === "connected"} initialTo={sendTo} />

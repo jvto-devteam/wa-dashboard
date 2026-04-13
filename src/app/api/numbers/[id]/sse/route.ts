@@ -4,6 +4,9 @@ import { db } from "@/lib/db";
 import { getOrCreateWaClient } from "@/lib/wa-client";
 
 export const dynamic = "force-dynamic";
+// Allow SSE connections to stay open long enough for QR scanning and session monitoring.
+// Vercel Hobby caps at 60s; Pro allows up to 300s.
+export const maxDuration = 60;
 
 export async function GET(
   req: NextRequest,
@@ -22,6 +25,15 @@ export async function GET(
   }
 
   const client = await getOrCreateWaClient(id);
+
+  // On Vercel serverless the Lambda is only "active" while a request is
+  // in-flight. POST /connect returns immediately, then the Lambda freezes
+  // before Baileys can receive WhatsApp events (including QR).
+  // By triggering connect() here, Baileys runs while this long-lived SSE
+  // request is active — ensuring QR events can actually fire and be streamed.
+  if (client.status === "disconnected") {
+    client.connect().catch(console.error);
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({

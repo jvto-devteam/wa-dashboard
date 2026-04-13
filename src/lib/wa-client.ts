@@ -16,6 +16,14 @@ declare global {
   var __waClients: Map<string, WhatsAppClient> | undefined;
 }
 
+/** On Vercel the deployment package is read-only; /tmp is the only writable dir. */
+function getAuthPath(authDirRelative: string): string {
+  if (process.env.VERCEL) {
+    return path.join("/tmp", authDirRelative);
+  }
+  return path.join(process.cwd(), authDirRelative);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractMessagePayload(key: any, timestamp: unknown, msgType: string, msgObj: Record<string, unknown>) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -158,7 +166,7 @@ export class WhatsAppClient {
     this.emit("status", { status: "connecting" });
 
     const logger = pino({ level: "silent" });
-    const authPath = path.join(process.cwd(), this.authDirRelative);
+    const authPath = getAuthPath(this.authDirRelative);
     fs.mkdirSync(authPath, { recursive: true });
 
     const { state, saveCreds } = await useMultiFileAuthState(authPath);
@@ -302,7 +310,7 @@ export class WhatsAppClient {
     this.user = null;
 
     // Remove auth files
-    const authPath = path.join(process.cwd(), this.authDirRelative);
+    const authPath = getAuthPath(this.authDirRelative);
     if (fs.existsSync(authPath)) {
       fs.rmSync(authPath, { recursive: true, force: true });
     }
@@ -429,7 +437,7 @@ export async function getOrCreateWaClient(
   waClients.set(numberId, client);
 
   // Auto-reconnect if auth files exist
-  const authPath = path.join(process.cwd(), number.authDir);
+  const authPath = getAuthPath(number.authDir);
   if (
     fs.existsSync(authPath) &&
     fs.readdirSync(authPath).some((f) => f.endsWith(".json"))

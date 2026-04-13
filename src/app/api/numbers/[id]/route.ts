@@ -5,6 +5,13 @@ import { getWaClient, removeWaClient } from "@/lib/wa-client";
 import fs from "fs";
 import path from "path";
 
+function getAuthPath(authDirRelative: string): string {
+  if (process.env.VERCEL) {
+    return path.join("/tmp", authDirRelative);
+  }
+  return path.join(process.cwd(), authDirRelative);
+}
+
 async function getAuthorizedNumber(numberId: string, userId: string, role: string) {
   const number = await db.waNumber.findUnique({ where: { id: numberId } });
   if (!number) return null;
@@ -48,7 +55,7 @@ export async function DELETE(
     }
 
     // Remove auth directory
-    const authPath = path.join(process.cwd(), number.authDir);
+    const authPath = getAuthPath(number.authDir);
     if (fs.existsSync(authPath)) {
       fs.rmSync(authPath, { recursive: true, force: true });
     }

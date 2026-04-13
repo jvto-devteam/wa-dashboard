@@ -69,11 +69,12 @@ function ConnectionTab({
     }
   }, [info.qr, info.status]);
 
-  const connect = () => {
+  const connect = async () => {
     setConnecting(true);
-    // Reopen SSE — this creates a fresh Lambda request so Baileys WebSocket
-    // events (QR, connection.open) can fire while the SSE is active.
+    // POST to start the connection, then SSE will stream QR/status updates.
+    // onConnect() also reopens SSE in case it was closed.
     onConnect();
+    await fetch(`/api/numbers/${numberId}/connect`, { method: "POST" }).catch(() => {});
   };
 
   const disconnect = async () => {

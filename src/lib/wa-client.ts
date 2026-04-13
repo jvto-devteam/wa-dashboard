@@ -119,6 +119,10 @@ interface WaStats {
   startTime: number;
 }
 
+// How long without a heartbeat before another instance may take over (1.5× interval).
+const HEARTBEAT_INTERVAL_MS = 30_000;
+export const HEARTBEAT_STALE_MS = 45_000;
+
 export class WhatsAppClient {
   numberId: string;
   authDirRelative: string;
@@ -130,6 +134,7 @@ export class WhatsAppClient {
   stats: WaStats = { sent: 0, received: 0, startTime: Date.now() };
   webhookUrl: string | null = null;
   listeners: Set<Listener> = new Set();
+  private _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     numberId: string,
@@ -158,6 +163,40 @@ export class WhatsAppClient {
 
   unsubscribe(fn: Listener) {
     this.listeners.delete(fn);
+  }
+
+  /** Start periodic heartbeat so other Lambda instances know this one is alive. */
+  private _startHeartbeat(): void {
+    this._stopHeartbeat();
+    const tick = async () => {
+      if (this.status !== "connected" || this.numberId === "legacy") return;
+      try {
+        const { db } = await import("./db");
+        await db.waNumber.update({
+          where: { id: this.numberId },
+          data: { connectionActiveAt: new Date() },
+        });
+      } catch { /* non-fatal */ }
+    };
+    void tick(); // immediate first write
+    this._heartbeatTimer = setInterval(tick, HEARTBEAT_INTERVAL_MS);
+  }
+
+  /** Stop heartbeat and clear the DB flag so other instances can take over. */
+  private _stopHeartbeat(): void {
+    if (this._heartbeatTimer) {
+      clearInterval(this._heartbeatTimer);
+      this._heartbeatTimer = null;
+    }
+    if (this.numberId === "legacy") return;
+    import("./db")
+      .then(({ db }) =>
+        db.waNumber.update({
+          where: { id: this.numberId },
+          data: { connectionActiveAt: null },
+        })
+      )
+      .catch(() => {});
   }
 
   /** Persist auth files to DB so any Lambda instance can restore the session. */
@@ -242,6 +281,7 @@ export class WhatsAppClient {
             statusCode !== DisconnectReason.loggedOut &&
             statusCode !== DisconnectReason.forbidden;
 
+          this._stopHeartbeat();
           this.status = "disconnected";
           this.qrDataUrl = null;
           this.user = null;
@@ -254,6 +294,7 @@ export class WhatsAppClient {
         }
 
         if (connection === "open") {
+          this._startHeartbeat();
           this.status = "connected";
           this.qrDataUrl = null;
           const me = sock.user;
@@ -328,6 +369,7 @@ export class WhatsAppClient {
   }
 
   async disconnect() {
+    this._stopHeartbeat();
     if (this.sock) {
       await this.sock.logout().catch(() => {});
       this.sock = null;
@@ -464,12 +506,17 @@ export async function getOrCreateWaClient(
   waClients.set(numberId, client);
 
   const authPath = getAuthPath(number.authDir);
-  let hasAuth =
+
+  // Check if auth files already existed BEFORE any DB restore.
+  // Only auto-connect from pre-existing local files (e.g. same process restart).
+  const hadLocalAuth =
     fs.existsSync(authPath) &&
     fs.readdirSync(authPath).some((f) => f.endsWith(".json"));
 
-  if (!hasAuth && number.authState) {
-    // Cold Lambda: /tmp is empty but DB has the session backup — restore it.
+  if (!hadLocalAuth && number.authState) {
+    // Cold Lambda: restore from DB so the files are ready for when SSE or
+    // /connect explicitly triggers connect(). Do NOT connect here — doing so
+    // would create a competing Baileys socket against another warm Lambda.
     try {
       fs.mkdirSync(authPath, { recursive: true });
       const stored = number.authState as Record<string, string>;
@@ -478,14 +525,19 @@ export async function getOrCreateWaClient(
           fs.writeFileSync(path.join(authPath, filename), content, "utf-8");
         }
       }
-      hasAuth = true;
     } catch {
       // non-fatal
     }
   }
 
-  // Auto-reconnect if auth files are available (local or restored from DB)
-  if (hasAuth) {
+  // Auto-connect only from pre-existing local files AND only if no other
+  // Lambda is actively holding the connection (heartbeat check).
+  const STALE_MS = HEARTBEAT_STALE_MS;
+  const isActiveElsewhere =
+    number.connectionActiveAt != null &&
+    Date.now() - new Date(number.connectionActiveAt).getTime() < STALE_MS;
+
+  if (hadLocalAuth && !isActiveElsewhere) {
     client.connect().catch(console.error);
   }
 

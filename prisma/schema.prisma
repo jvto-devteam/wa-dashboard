@@ -35,8 +35,9 @@ model WaNumber {
   apiKey      String       @unique
   webhookUrl  String?
   phoneNumber String?
-  authDir     String
-  authState   Json?        // Baileys session backup for cross-Lambda restore (Vercel)
+  authDir            String
+  authState          Json?        // Baileys session backup for cross-Lambda restore (Vercel)
+  connectionActiveAt DateTime?    // Heartbeat: updated every 30 s while connected
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   messages    MessageLog[]

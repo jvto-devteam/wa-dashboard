@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getOrCreateWaClient } from "@/lib/wa-client";
+import { getOrCreateWaClient, HEARTBEAT_STALE_MS } from "@/lib/wa-client";
 
 export const dynamic = "force-dynamic";
 // Allow SSE connections to stay open long enough for QR scanning and session monitoring.
@@ -26,20 +26,29 @@ export async function GET(
 
   const client = await getOrCreateWaClient(id);
 
-  // On Vercel serverless the Lambda is only "active" while a request is
-  // in-flight. POST /connect returns immediately, then the Lambda freezes
-  // before Baileys can receive WhatsApp events (including QR).
-  // By triggering connect() here, Baileys runs while this long-lived SSE
-  // request is active — ensuring QR events can actually fire and be streamed.
-  if (client.status === "disconnected") {
+  // Heartbeat check: is another Lambda instance actively holding this connection?
+  const isActiveElsewhere =
+    number.connectionActiveAt != null &&
+    Date.now() - new Date(number.connectionActiveAt).getTime() < HEARTBEAT_STALE_MS;
+
+  if (client.status === "disconnected" && !isActiveElsewhere) {
+    // No other Lambda has this connection — safe to connect here.
+    // On Vercel, Baileys events fire while this long-lived SSE request is active.
     client.connect().catch(console.error);
   }
+
+  // If another Lambda is actively connected, report that status to the frontend
+  // so the UI doesn't flash "Disconnected" unnecessarily.
+  const initialPayload = isActiveElsewhere && client.status !== "connected"
+    ? { status: "connected", hasQr: false, qr: null,
+        webhookUrl: number.webhookUrl, stats: null }
+    : client.getStatus();
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
       // Send initial status
-      const initial = JSON.stringify(client.getStatus());
+      const initial = JSON.stringify(initialPayload);
       controller.enqueue(encoder.encode(`data: ${initial}\n\n`));
 
       const listener = (data: Record<string, unknown>) => {

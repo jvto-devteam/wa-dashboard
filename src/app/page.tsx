@@ -29,18 +29,18 @@ function QuickCard({
   return (
     <Link
       href={href}
-      className="bg-[#0a1628] border border-white/5 hover:border-[#25d366]/30 rounded-2xl p-5 flex items-start gap-4 transition-all group"
+      className="bg-white border border-gray-200 hover:shadow-md hover:border-gray-300 rounded-2xl p-5 flex items-start gap-4 transition-all group shadow-sm"
     >
       <div
-        className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:opacity-90 transition-opacity ${accent ?? "bg-[#25d366]/10"}`}
+        className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:opacity-90 transition-opacity ${accent ?? "bg-green-50"}`}
       >
         <Icon className="w-5 h-5 text-[#25d366]" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-white font-medium text-sm">{label}</p>
-        <p className="text-white/40 text-xs mt-0.5">{description}</p>
+        <p className="text-gray-800 font-medium text-sm">{label}</p>
+        <p className="text-gray-500 text-xs mt-0.5">{description}</p>
       </div>
-      <ArrowUpRight className="w-4 h-4 text-white/20 group-hover:text-[#25d366] transition-colors mt-0.5" />
+      <ArrowUpRight className="w-4 h-4 text-gray-400 group-hover:text-[#25d366] transition-colors mt-0.5" />
     </Link>
   );
 }
@@ -57,14 +57,14 @@ function StatCard({
   accent?: string;
 }) {
   return (
-    <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-white/50 text-sm">{label}</span>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ?? "bg-white/5"}`}>
-          <Icon className="w-4 h-4 text-white/60" />
+        <span className="text-gray-500 text-sm">{label}</span>
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${accent ?? "bg-gray-100"}`}>
+          <Icon className="w-4 h-4 text-gray-500" />
         </div>
       </div>
-      <p className="text-2xl font-bold text-white">{value}</p>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
     </div>
   );
 }
@@ -103,10 +103,10 @@ export default function DashboardPage() {
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-1">
             <Shield className="w-5 h-5 text-[#25d366]" />
-            <h1 className="text-2xl font-bold text-white">Admin Dashboard</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
           </div>
-          <p className="text-white/40 text-sm">
-            Welcome back, <span className="text-white/70">{user.name}</span> —
+          <p className="text-gray-500 text-sm">
+            Welcome back, <span className="text-gray-700">{user.name}</span> —
             Manage users and monitor the system
           </p>
         </div>
@@ -117,21 +117,21 @@ export default function DashboardPage() {
             icon={Users}
             label="User Management"
             description="Create, edit, and manage user accounts"
-            accent="bg-blue-500/10"
+            accent="bg-blue-50"
           />
           <QuickCard
             href="/admin/overview"
             icon={BarChart3}
             label="System Overview"
             description="Monitor all WA numbers and connections"
-            accent="bg-purple-500/10"
+            accent="bg-purple-50"
           />
           <QuickCard
             href="/api-docs"
             icon={BookOpen}
             label="API Documentation"
             description="REST API reference and testing"
-            accent="bg-orange-500/10"
+            accent="bg-orange-50"
           />
         </div>
       </div>
@@ -142,9 +142,9 @@ export default function DashboardPage() {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-white/40 text-sm mt-1">
-          Welcome back, <span className="text-white/70">{user.name}</span>
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-500 text-sm mt-1">
+          Welcome back, <span className="text-gray-700">{user.name}</span>
         </p>
       </div>
 
@@ -154,18 +154,18 @@ export default function DashboardPage() {
           label="WA Numbers"
           value={`${stats.total} / 3`}
           icon={Phone}
-          accent="bg-[#25d366]/10"
+          accent="bg-green-50"
         />
         <StatCard
           label="Connected"
           value={stats.connected}
           icon={Wifi}
-          accent="bg-purple-500/10"
+          accent="bg-purple-50"
         />
       </div>
 
       <div>
-        <h2 className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-3">
+        <h2 className="text-gray-700 text-xs font-semibold uppercase tracking-wider mb-3">
           Quick Actions
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -180,7 +180,7 @@ export default function DashboardPage() {
             icon={BookOpen}
             label="API Documentation"
             description="Learn how to send messages via API"
-            accent="bg-orange-500/10"
+            accent="bg-orange-50"
           />
         </div>
       </div>

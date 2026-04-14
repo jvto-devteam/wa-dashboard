@@ -22,8 +22,8 @@ export default async function RootLayout({
   const isAuthPage = pathname === "/login" || pathname.startsWith("/login");
 
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-[#0f172a] text-white antialiased`}>
+    <html lang="en">
+      <body className={`${inter.className} bg-gray-50 text-gray-900 antialiased`}>
         {isAuthPage ? (
           <div className="min-h-screen flex items-center justify-center p-4">
             {children}

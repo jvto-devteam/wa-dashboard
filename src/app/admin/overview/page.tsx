@@ -36,14 +36,14 @@ function StatCard({
   accent: string;
 }) {
   return (
-    <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
+    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-white/50 text-sm">{label}</span>
+        <span className="text-gray-500 text-sm">{label}</span>
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${accent}`}>
-          <Icon className="w-4 h-4 text-white/70" />
+          <Icon className="w-4 h-4 text-gray-600" />
         </div>
       </div>
-      <p className="text-3xl font-bold text-white">{value}</p>
+      <p className="text-3xl font-bold text-gray-900">{value}</p>
     </div>
   );
 }
@@ -73,7 +73,7 @@ export default function AdminOverviewPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-white/30" />
+        <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
       </div>
     );
   }
@@ -85,16 +85,16 @@ export default function AdminOverviewPage() {
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <BarChart3 className="w-6 h-6 text-[#25d366]" />
             System Overview
           </h1>
-          <p className="text-white/40 text-sm mt-1">Real-time monitoring of all connections</p>
+          <p className="text-gray-500 text-sm mt-1">Real-time monitoring of all connections</p>
         </div>
         <button
           onClick={fetchData}
           disabled={refreshing}
-          className="flex items-center gap-1.5 text-white/40 hover:text-white text-sm transition-colors"
+          className="flex items-center gap-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-2 rounded-lg text-sm transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
           Refresh
@@ -103,25 +103,25 @@ export default function AdminOverviewPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        <StatCard label="Total Users" value={data.stats.totalUsers} icon={Users} accent="bg-blue-500/10" />
-        <StatCard label="WA Numbers" value={data.stats.totalNumbers} icon={Phone} accent="bg-[#25d366]/10" />
-        <StatCard label="Connected" value={data.stats.connectedNumbers} icon={Wifi} accent="bg-purple-500/10" />
+        <StatCard label="Total Users" value={data.stats.totalUsers} icon={Users} accent="bg-blue-50" />
+        <StatCard label="WA Numbers" value={data.stats.totalNumbers} icon={Phone} accent="bg-green-50" />
+        <StatCard label="Connected" value={data.stats.connectedNumbers} icon={Wifi} accent="bg-purple-50" />
       </div>
 
       {/* Numbers table */}
-      <div className="bg-[#0a1628] border border-white/5 rounded-2xl">
-        <div className="px-6 py-4 border-b border-white/5">
-          <h2 className="text-white font-semibold flex items-center gap-2">
+      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <h2 className="text-gray-800 font-semibold flex items-center gap-2">
             <Activity className="w-4 h-4 text-[#25d366]" />
             All WA Numbers
           </h2>
         </div>
-        <div className="divide-y divide-white/5">
+        <div className="divide-y divide-gray-100">
           {data.numbers.length === 0 ? (
-            <div className="py-10 text-center text-white/30 text-sm">No WA numbers yet</div>
+            <div className="py-10 text-center text-gray-400 text-sm">No WA numbers yet</div>
           ) : (
             data.numbers.map((n) => (
-              <div key={n.id} className="px-6 py-4 flex items-center gap-4">
+              <div key={n.id} className="px-6 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors">
                 <div className="flex-shrink-0">
                   {n.status === "connected" ? (
                     <Wifi className="w-4 h-4 text-[#25d366]" />
@@ -131,10 +131,10 @@ export default function AdminOverviewPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-white text-sm font-medium">{n.label}</p>
+                    <p className="text-gray-800 text-sm font-medium">{n.label}</p>
                     <StatusBadge status={n.status} />
                   </div>
-                  <p className="text-white/40 text-xs">
+                  <p className="text-gray-500 text-xs">
                     Owner: {n.user.name} ({n.user.email})
                     {n.phoneNumber && ` · +${n.phoneNumber}`}
                   </p>

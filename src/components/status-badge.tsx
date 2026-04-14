@@ -15,18 +15,18 @@ const statusConfig: Record<
 > = {
   connected: {
     label: "Connected",
-    dot: "bg-[#25d366] shadow-[0_0_8px_#25d366]",
+    dot: "bg-[#25d366]",
     text: "text-[#25d366]",
   },
   connecting: {
     label: "Connecting...",
-    dot: "bg-yellow-400 shadow-[0_0_8px_#facc15] animate-pulse",
-    text: "text-yellow-400",
+    dot: "bg-yellow-500 animate-pulse",
+    text: "text-yellow-600",
   },
   disconnected: {
     label: "Disconnected",
-    dot: "bg-red-500 shadow-[0_0_8px_#ef4444]",
-    text: "text-red-400",
+    dot: "bg-red-500",
+    text: "text-red-500",
   },
 };
 

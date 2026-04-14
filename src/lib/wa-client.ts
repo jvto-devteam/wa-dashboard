@@ -471,6 +471,15 @@ export class WhatsAppClient {
     return { success: true, to: jid };
   }
 
+  async isOnWhatsApp(phoneNo: string): Promise<boolean> {
+    if (!this.sock || this.status !== "connected") {
+      throw new Error("WhatsApp is not connected");
+    }
+    const cleaned = phoneNo.replace(/[^0-9]/g, "");
+    const results = await this.sock.onWhatsApp(cleaned);
+    return results?.[0]?.exists ?? false;
+  }
+
   async getGroups(): Promise<{ id: string; name: string; participantCount: number; description: string | null }[]> {
     if (!this.sock || this.status !== "connected") {
       throw new Error("WhatsApp is not connected");

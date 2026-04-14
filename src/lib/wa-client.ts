@@ -49,6 +49,8 @@ function extractMessagePayload(key: any, timestamp: unknown, msgType: string, ms
         url: m.url ?? null,
         mimetype: m.mimetype ?? null,
         fileSize: m.fileLength ? Number(m.fileLength) : null,
+        mediaKey: m.mediaKey ? Buffer.from(m.mediaKey).toString("base64") : null,
+        directPath: m.directPath ?? null,
         ...(msgType === "videoMessage" && { seconds: m.seconds ?? null }),
         ...(msgType === "stickerMessage" && { isAnimated: m.isAnimated ?? false }),
       };
@@ -59,6 +61,8 @@ function extractMessagePayload(key: any, timestamp: unknown, msgType: string, ms
         mimetype: m.mimetype ?? null,
         seconds: m.seconds ?? null,
         ptt: m.ptt ?? false,
+        mediaKey: m.mediaKey ? Buffer.from(m.mediaKey).toString("base64") : null,
+        directPath: m.directPath ?? null,
       };
       break;
     case "documentMessage":
@@ -69,6 +73,8 @@ function extractMessagePayload(key: any, timestamp: unknown, msgType: string, ms
         fileSize: m.fileLength ? Number(m.fileLength) : null,
         filename: m.fileName ?? null,
         title: m.title ?? null,
+        mediaKey: m.mediaKey ? Buffer.from(m.mediaKey).toString("base64") : null,
+        directPath: m.directPath ?? null,
       };
       break;
     case "locationMessage":

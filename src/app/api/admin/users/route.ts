@@ -3,6 +3,12 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
+function generateApiKey(): string {
+  return Array.from({ length: 3 }, () =>
+    Math.random().toString(36).slice(2, 8).toUpperCase()
+  ).join("-");
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session || session.role !== "ADMIN") {
@@ -51,8 +57,9 @@ export async function POST(req: NextRequest) {
       password: hashed,
       name,
       role: role === "ADMIN" ? "ADMIN" : "USER",
+      apiKey: generateApiKey(),
     },
-    select: { id: true, email: true, name: true, role: true, createdAt: true },
+    select: { id: true, email: true, name: true, role: true, createdAt: true, apiKey: true },
   });
 
   return NextResponse.json(user, { status: 201 });

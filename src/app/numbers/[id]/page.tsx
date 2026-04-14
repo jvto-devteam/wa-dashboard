@@ -18,6 +18,7 @@ interface NumberInfo {
   id: string;
   label: string;
   apiKey: string;
+  userApiKey?: string | null;
   webhookUrl: string | null;
   phoneNumber: string | null;
   status: ConnectionStatus;
@@ -577,9 +578,15 @@ function GroupsTab({ numberId, connected, onSendTo }: { numberId: string; connec
 }
 
 // ─── API Tab ─────────────────────────────────────────────────────────────────
-function ApiTab({ numberId, apiKey: initialKey }: { numberId: string; apiKey: string }) {
-  const [apiKey, setApiKey] = useState(initialKey);
+function ApiTab({ numberId, apiKey: initialKey, userApiKey: initialUserKey }: {
+  numberId: string;
+  apiKey: string;
+  userApiKey: string | null;
+}) {
+  const [apiKey, setApiKey] = useState(initialKey);           // number_key
+  const [userApiKey, setUserApiKey] = useState(initialUserKey ?? ""); // api_key
   const [regenerating, setRegen] = useState(false);
+  const [regenUser, setRegenUser] = useState(false);
 
   const regen = async () => {
     setRegen(true);
@@ -589,33 +596,52 @@ function ApiTab({ numberId, apiKey: initialKey }: { numberId: string; apiKey: st
     setRegen(false);
   };
 
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+  const regenUserKey = async () => {
+    setRegenUser(true);
+    const res = await fetch("/api/user/apikey", { method: "POST" });
+    const data = await res.json();
+    if (data.apiKey) setUserApiKey(data.apiKey);
+    setRegenUser(false);
+  };
 
-  const endpoints = [
-    {
-      method: "POST",
-      path: "/api/v1/send/text",
-      description: "Send a text message",
-      body: `{ "to": "628123456789", "text": "Hello!" }`,
-    },
-    {
-      method: "POST",
-      path: "/api/v1/send/media",
-      description: "Send media (image/video/document)",
-      body: `{ "to": "628123456789", "url": "https://...", "type": "image", "caption": "Hi" }`,
-    },
-  ];
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      {/* API Key */}
+      {/* api_key — User level */}
       <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
-        <h2 className="text-white font-medium text-sm mb-4 flex items-center gap-2">
+        <h2 className="text-white font-medium text-sm mb-1 flex items-center gap-2">
           <Key className="w-4 h-4 text-[#25d366]" />
-          API Key for this Number
+          API Key
         </h2>
+        <p className="text-white/30 text-xs mb-3">Milik akun kamu — sama untuk semua nomor WA</p>
+        {userApiKey ? (
+          <div className="flex items-center gap-2 bg-black/30 rounded-xl px-3 py-2.5 border border-white/5 mb-2">
+            <code className="text-[#25d366] text-sm font-mono flex-1 truncate">{userApiKey}</code>
+            <CopyButton text={userApiKey} />
+          </div>
+        ) : (
+          <p className="text-yellow-400/70 text-xs mb-2">Belum ada — klik Generate di bawah</p>
+        )}
+        <button
+          onClick={regenUserKey}
+          disabled={regenUser}
+          className="flex items-center gap-1.5 text-white/40 hover:text-white text-xs transition-colors mt-1"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${regenUser ? "animate-spin" : ""}`} />
+          {userApiKey ? "Regenerate" : "Generate"}
+        </button>
+      </div>
+
+      {/* number_key — per WaNumber */}
+      <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
+        <h2 className="text-white font-medium text-sm mb-1 flex items-center gap-2">
+          <Key className="w-4 h-4 text-blue-400" />
+          Number Key
+        </h2>
+        <p className="text-white/30 text-xs mb-3">Khusus untuk nomor WA ini saja</p>
         <div className="flex items-center gap-2 bg-black/30 rounded-xl px-3 py-2.5 border border-white/5 mb-2">
-          <code className="text-[#25d366] text-sm font-mono flex-1 truncate">{apiKey}</code>
+          <code className="text-blue-400 text-sm font-mono flex-1 truncate">{apiKey}</code>
           <CopyButton text={apiKey} />
         </div>
         <button
@@ -628,25 +654,26 @@ function ApiTab({ numberId, apiKey: initialKey }: { numberId: string; apiKey: st
         </button>
       </div>
 
-      {/* Endpoints */}
-      {endpoints.map((ep) => (
-        <div key={ep.path} className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="bg-blue-500/20 text-blue-400 text-xs font-mono px-2 py-0.5 rounded">
-              {ep.method}
-            </span>
-            <code className="text-white/70 text-sm font-mono">{ep.path}</code>
-          </div>
-          <p className="text-white/50 text-xs mb-3">{ep.description}</p>
-          <div className="bg-black/30 rounded-xl p-3 border border-white/5">
-            <p className="text-white/40 text-xs mb-1">cURL example:</p>
-            <pre className="text-[#25d366] text-xs font-mono overflow-x-auto whitespace-pre-wrap">{`curl -X POST ${baseUrl}${ep.path} \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '${ep.body}'`}</pre>
-          </div>
-        </div>
-      ))}
+      {/* PHP Example */}
+      <div className="bg-[#0a1628] border border-white/5 rounded-2xl p-5">
+        <h2 className="text-white font-medium text-sm mb-3">Contoh PHP</h2>
+        <pre className="text-[#25d366] text-xs font-mono overflow-x-auto whitespace-pre-wrap bg-black/30 rounded-xl p-3 border border-white/5">{`$data = [
+  "api_key"    => "${userApiKey || "YOUR-API-KEY"}",
+  "number_key" => "${apiKey}",
+  "phone_no"   => "628123456789",
+  "message"    => "Halo!",
+];
+$curl = curl_init();
+curl_setopt_array($curl, [
+  CURLOPT_URL            => '${baseUrl}/api/v1/send_message',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_CUSTOMREQUEST  => 'POST',
+  CURLOPT_POSTFIELDS     => json_encode($data),
+  CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+]);
+$response = json_decode(curl_exec($curl));
+curl_close($curl);`}</pre>
+      </div>
     </div>
   );
 }
@@ -672,7 +699,10 @@ export default function NumberDetailPage() {
     try {
       const res = await fetch(`/api/numbers/${id}/status`);
       if (!res.ok) { router.push("/numbers"); return; }
-      setInfo(await res.json());
+      const data = await res.json();
+      const meRes = await fetch("/api/auth/me");
+      const meData = await meRes.json();
+      setInfo({ ...data, userApiKey: meData.apiKey ?? null });
     } catch { /* ignore */ }
   }, [id, router]);
 
@@ -790,7 +820,7 @@ export default function NumberDetailPage() {
         <WebhookTab numberId={id} initialUrl={info.webhookUrl} />
       )}
       {activeTab === "api" && (
-        <ApiTab numberId={id} apiKey={info.apiKey} />
+        <ApiTab numberId={id} apiKey={info.apiKey} userApiKey={info.userApiKey ?? null} />
       )}
     </div>
   );

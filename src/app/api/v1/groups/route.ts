@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getClientByApiKey } from "@/lib/wa-client";
+import { getClientByApiKey, getClientByKeys } from "@/lib/wa-client";
 
 // Legacy: GET with Authorization: Bearer header
 export async function GET(req: NextRequest) {
@@ -35,20 +35,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { api_key, number_key } = body;
 
-  if (!api_key || !number_key) {
-    return NextResponse.json(
-      { status: "1002", message: "Invalid API Key" },
-      { status: 401 }
-    );
-  }
+  if (!api_key) return NextResponse.json({ status: "1002", message: "Invalid API Key" }, { status: 401 });
+  if (!number_key) return NextResponse.json({ status: "1003", message: "Invalid Number Key" }, { status: 401 });
 
-  const found = await getClientByApiKey(number_key);
-  if (!found) {
-    return NextResponse.json(
-      { status: "1003", message: "Invalid Number Key" },
-      { status: 403 }
-    );
-  }
+  const found = await getClientByKeys(api_key, number_key);
+  if (!found) return NextResponse.json({ status: "1003", message: "Invalid API Key or Number Key" }, { status: 403 });
 
   const { client } = found;
 

@@ -574,6 +574,31 @@ export function removeWaClient(numberId: string): void {
 }
 
 /**
+ * WatZap-compatible auth: validates api_key (User) + number_key (WaNumber)
+ * and ensures the number belongs to the user.
+ */
+export async function getClientByKeys(apiKey: string, numberKey: string) {
+  const { db } = await import("./db");
+
+  // Validate api_key → find User
+  const user = await db.user.findUnique({ where: { apiKey } });
+  if (!user) return null;
+
+  // Validate number_key → find WaNumber owned by that user
+  const number = await db.waNumber.findUnique({
+    where: { apiKey: numberKey },
+    select: {
+      id: true, userId: true, apiKey: true, label: true,
+      phoneNumber: true, webhookUrl: true,
+    },
+  });
+  if (!number || number.userId !== user.id) return null;
+
+  const client = await getOrCreateWaClient(number.id);
+  return { client, number, user };
+}
+
+/**
  * Find a WA client by its API key (for v1 external API calls).
  * Returns both the client and the WaNumber record.
  */

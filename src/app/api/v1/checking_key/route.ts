@@ -7,50 +7,52 @@ export async function POST(req: NextRequest) {
   const { api_key } = body;
 
   if (!api_key) {
-    return NextResponse.json(
-      { status: "1002", message: "Invalid API Key" },
-      { status: 401 }
-    );
+    return NextResponse.json({ status: "1002", message: "Invalid API Key" }, { status: 401 });
   }
 
-  // api_key = WaNumber's apiKey — find the number (and its owner)
-  const number = await db.waNumber.findUnique({
+  const user = await db.user.findUnique({
     where: { apiKey: api_key },
     select: {
       id: true,
-      apiKey: true,
-      phoneNumber: true,
+      name: true,
+      email: true,
       createdAt: true,
-      user: { select: { id: true, name: true, email: true } },
+      waNumbers: {
+        select: {
+          id: true,
+          apiKey: true,
+          phoneNumber: true,
+          label: true,
+          createdAt: true,
+        },
+      },
     },
   });
 
-  if (!number) {
-    return NextResponse.json(
-      { status: "1002", message: "Invalid API Key" },
-      { status: 403 }
-    );
+  if (!user) {
+    return NextResponse.json({ status: "1002", message: "Invalid API Key" }, { status: 403 });
   }
 
-  const client = getWaClient(number.id);
-  const isConnected = client?.status === "connected";
+  const licenses = user.waNumbers.map((n) => {
+    const client = getWaClient(n.id);
+    return {
+      id: n.id,
+      key: n.apiKey,
+      label: n.label,
+      wa_number: n.phoneNumber ?? null,
+      is_connected: client?.status === "connected",
+      active_from: n.createdAt,
+    };
+  });
 
   return NextResponse.json({
     status: true,
     message: "Successfully",
     data: {
-      id: number.user.id,
-      name: number.user.name,
-      email: number.user.email,
-      licenses_key: [
-        {
-          id: number.id,
-          key: number.apiKey,
-          wa_number: number.phoneNumber ?? null,
-          is_connected: isConnected,
-          active_from: number.createdAt,
-        },
-      ],
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      licenses_key: licenses,
     },
   });
 }

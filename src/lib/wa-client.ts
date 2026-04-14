@@ -517,6 +517,14 @@ export class WhatsAppClient {
 
 // ─── Multi-instance manager ────────────────────────────────────────────────
 
+/**
+ * Timestamp of when this process (module) was first loaded.
+ * Any heartbeat written BEFORE this time belongs to a now-dead previous
+ * process (e.g., the process PM2 just killed). We treat those as stale and
+ * allow this fresh process to take over the connection immediately.
+ */
+const PROCESS_START_TIME = Date.now();
+
 const waClients: Map<string, WhatsAppClient> =
   global.__waClients ?? (global.__waClients = new Map());
 
@@ -567,11 +575,19 @@ export async function getOrCreateWaClient(
   }
 
   // Auto-connect only from pre-existing local files AND only if no other
-  // Lambda is actively holding the connection (heartbeat check).
+  // instance is actively holding the connection (heartbeat check).
+  // IMPORTANT: A heartbeat written BEFORE this process started belongs to the
+  // previous (now-dead) process — treat it as stale so we reconnect immediately
+  // instead of waiting 45 s for it to expire. This fixes the "always disconnects
+  // after build/pm2 restart" issue where the old process's heartbeat looks fresh
+  // but the process is already dead.
   const STALE_MS = HEARTBEAT_STALE_MS;
+  const heartbeatTime = number.connectionActiveAt
+    ? new Date(number.connectionActiveAt).getTime()
+    : 0;
   const isActiveElsewhere =
-    number.connectionActiveAt != null &&
-    Date.now() - new Date(number.connectionActiveAt).getTime() < STALE_MS;
+    heartbeatTime > PROCESS_START_TIME && // written after THIS process started → another live instance
+    Date.now() - heartbeatTime < STALE_MS;
 
   if (hadLocalAuth && !isActiveElsewhere) {
     client.connect().catch(console.error);

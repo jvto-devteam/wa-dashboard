@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 
+const CORS_HEADERS = [
+  { key: "Access-Control-Allow-Origin", value: "*" },
+  { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
+  { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
+];
+
 const nextConfig: NextConfig = {
   serverExternalPackages: [
     "@whiskeysockets/baileys",
@@ -14,6 +20,15 @@ const nextConfig: NextConfig = {
     dangerouslyAllowSVG: true,
     contentDispositionType: "attachment",
     remotePatterns: [{ protocol: "https", hostname: "**" }],
+  },
+  async headers() {
+    return [
+      {
+        // Apply CORS to all public v1 API routes
+        source: "/api/v1/:path*",
+        headers: CORS_HEADERS,
+      },
+    ];
   },
 };
 

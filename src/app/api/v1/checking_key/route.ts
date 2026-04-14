@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getWaClient } from "@/lib/wa-client";
+import { corsOptions, withCors } from "@/lib/cors";
+
+export function OPTIONS() { return corsOptions(); }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { api_key } = body;
 
   if (!api_key) {
-    return NextResponse.json({ status: "1002", message: "Invalid API Key" }, { status: 401 });
+    return withCors(NextResponse.json({ status: "1002", message: "Invalid API Key" }, { status: 401 }));
   }
 
   const user = await db.user.findUnique({
@@ -30,7 +33,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (!user) {
-    return NextResponse.json({ status: "1002", message: "Invalid API Key" }, { status: 403 });
+    return withCors(NextResponse.json({ status: "1002", message: "Invalid API Key" }, { status: 403 }));
   }
 
   const licenses = user.waNumbers.map((n) => {
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
     };
   });
 
-  return NextResponse.json({
+  return withCors(NextResponse.json({
     status: true,
     message: "Successfully",
     data: {
@@ -54,5 +57,5 @@ export async function POST(req: NextRequest) {
       email: user.email,
       licenses_key: licenses,
     },
-  });
+  }));
 }

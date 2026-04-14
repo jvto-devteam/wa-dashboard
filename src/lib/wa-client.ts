@@ -135,6 +135,8 @@ export class WhatsAppClient {
   webhookUrl: string | null = null;
   listeners: Set<Listener> = new Set();
   private _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /** Debounce timer — delays emitting "disconnected" to UI to hide brief Baileys reconnects */
+  private _disconnectDebounce: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     numberId: string,
@@ -286,14 +288,33 @@ export class WhatsAppClient {
           this.qrDataUrl = null;
           this.user = null;
           this.sock = null;
-          this.emit("status", { status: "disconnected" });
 
           if (shouldReconnect) {
+            // Brief disconnect during auto-reconnect — delay the UI update by 6s.
+            // If connection comes back within 6s, the UI never sees "disconnected".
+            this._disconnectDebounce = setTimeout(() => {
+              this._disconnectDebounce = null;
+              if (this.status === "disconnected") {
+                this.emit("status", { status: "disconnected" });
+              }
+            }, 6000);
             setTimeout(() => this.connect(), 3000);
+          } else {
+            // Permanent disconnect (loggedOut / forbidden) — notify UI immediately.
+            if (this._disconnectDebounce) {
+              clearTimeout(this._disconnectDebounce);
+              this._disconnectDebounce = null;
+            }
+            this.emit("status", { status: "disconnected" });
           }
         }
 
         if (connection === "open") {
+          // Cancel any pending "disconnected" UI notification — reconnect succeeded.
+          if (this._disconnectDebounce) {
+            clearTimeout(this._disconnectDebounce);
+            this._disconnectDebounce = null;
+          }
           this._startHeartbeat();
           this.status = "connected";
           this.qrDataUrl = null;

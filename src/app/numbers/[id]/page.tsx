@@ -169,7 +169,38 @@ function ConnectionTab({
   );
 }
 
+// ─── WA preview renderer ──────────────────────────────────────────────────────
+function renderWAPreview(text: string, vars: Record<string, string> = {}): string {
+  // Substitute variables first
+  let s = text.replace(/\{([^}]+)\}/g, (_, name) => {
+    const val = vars[name.trim()];
+    return val
+      ? `<span class="text-gray-900">${val}</span>`
+      : `<span class="inline-block bg-amber-100 text-amber-700 font-mono text-xs rounded px-1 mx-0.5">{${name}}</span>`;
+  });
+  // Escape HTML in non-span portions — already done above, just escape remaining
+  s = s
+    .replace(/```([\s\S]*?)```/g, "<code class=\"font-mono text-xs bg-black/10 rounded px-0.5\">$1</code>")
+    .replace(/\*([^*\n]+)\*/g, "<strong>$1</strong>")
+    .replace(/_([^_\n]+)_/g, "<em>$1</em>")
+    .replace(/~([^~\n]+)~/g, "<del>$1</del>")
+    .replace(/\n/g, "<br/>");
+  return s;
+}
+
 // ─── Send Tab ────────────────────────────────────────────────────────────────
+interface TemplateDetail {
+  id: string;
+  name: string;
+  content: string;
+  description?: string | null;
+  mediaType?: string | null;
+  mediaUrl?: string | null;
+  mediaFilename?: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  variables: Array<{ name: string; isRequired: boolean; description?: string | null; example?: string | null }>;
+}
+
 function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; connected: boolean; initialTo?: string }) {
   type MsgType = "text" | "image" | "video" | "document" | "template";
   const [msgType, setMsgType] = useState<MsgType>("text");
@@ -185,17 +216,35 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
   const [filename, setFilename] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; variables: any[] }>>([]);
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateDetail | null>(null);
+  const [loadingTpl, setLoadingTpl] = useState(false);
 
+  // Fetch template list when tab opened
   useEffect(() => {
-    // Fetch templates when template tab is selected
     if (msgType === "template" && templates.length === 0) {
       fetch("/api/templates")
         .then(res => res.json())
-        .then(data => setTemplates(data))
+        .then(data => Array.isArray(data) ? setTemplates(data) : null)
         .catch(() => {});
     }
   }, [msgType, templates.length]);
+
+  // Fetch full template details when selection changes
+  useEffect(() => {
+    if (!templateId) { setSelectedTemplate(null); return; }
+    setLoadingTpl(true);
+    fetch(`/api/templates/${templateId}`)
+      .then(res => res.json())
+      .then((data: TemplateDetail) => {
+        setSelectedTemplate(data);
+        // Reset variables to empty map
+        setTemplateVariables({});
+      })
+      .catch(() => {})
+      .finally(() => setLoadingTpl(false));
+  }, [templateId]);
+
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
@@ -214,6 +263,7 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
       } else if (msgType === "template") {
         if (!templateId) {
           setResult({ ok: false, msg: "Please select a template" });
+          setSending(false);
           return;
         }
         res = await fetch(`/api/numbers/${numberId}/send/template`, {
@@ -228,8 +278,8 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
           body: JSON.stringify({ to: to.trim(), url, type: msgType, caption, filename }),
         });
       }
-      const data = await res.json();
-      setResult({ ok: res.ok, msg: res.ok ? "Message sent successfully!" : (data.error ?? "Failed") });
+      const data = await res!.json();
+      setResult({ ok: res!.ok, msg: res!.ok ? "Message sent successfully!" : (data.error ?? "Failed") });
     } catch {
       setResult({ ok: false, msg: "Network error" });
     } finally {
@@ -246,6 +296,16 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
   ];
 
   const inputCls = "w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-green-400 focus:ring-2 focus:ring-green-50 transition-colors";
+
+  // Compute preview text
+  const previewText = msgType === "template"
+    ? (selectedTemplate?.content ?? "")
+    : msgType === "text"
+    ? text
+    : "";
+
+  const showPreview = (msgType === "text" && text.trim()) ||
+    (msgType === "template" && selectedTemplate?.content);
 
   return (
     <div className="max-w-xl mx-auto space-y-4">
@@ -302,8 +362,77 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
           </div>
         )}
 
+        {/* Template selector */}
+        {msgType === "template" && (
+          <div className="space-y-4 mb-4">
+            <div>
+              <label className="text-gray-500 text-xs font-medium block mb-1">Template</label>
+              <select
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+                className={inputCls + " cursor-pointer"}
+              >
+                <option value="">— Pilih template —</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {loadingTpl && (
+              <div className="flex items-center gap-2 text-gray-400 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading template...
+              </div>
+            )}
+
+            {selectedTemplate && !loadingTpl && (
+              <>
+                {selectedTemplate.description && (
+                  <p className="text-gray-400 text-xs">{selectedTemplate.description}</p>
+                )}
+
+                {/* Media badge */}
+                {selectedTemplate.mediaType && (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    {selectedTemplate.mediaType === "image" && <ImageIcon className="w-3.5 h-3.5" />}
+                    {selectedTemplate.mediaType === "video" && <Video className="w-3.5 h-3.5" />}
+                    {selectedTemplate.mediaType === "file" && <FileText className="w-3.5 h-3.5" />}
+                    <span className="capitalize">{selectedTemplate.mediaType} attachment</span>
+                    {selectedTemplate.mediaUrl && !selectedTemplate.mediaUrl.includes("{") && (
+                      <span className="text-gray-300 ml-1 truncate max-w-[180px]">{selectedTemplate.mediaUrl}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Variable inputs */}
+                {selectedTemplate.variables.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-gray-500 text-xs font-medium">Variables</p>
+                    {selectedTemplate.variables.map(v => (
+                      <div key={v.name}>
+                        <label className="text-gray-500 text-xs block mb-1">
+                          <span className="font-mono text-gray-700">{`{${v.name}}`}</span>
+                          {v.isRequired && <span className="text-red-400 ml-1">*</span>}
+                          {v.description && <span className="text-gray-400 ml-1">— {v.description}</span>}
+                        </label>
+                        <input
+                          value={templateVariables[v.name] ?? ""}
+                          onChange={(e) => setTemplateVariables(prev => ({ ...prev, [v.name]: e.target.value }))}
+                          placeholder={v.example ?? `Enter ${v.name}...`}
+                          className={inputCls}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* Media URL */}
-        {msgType !== "text" && (
+        {msgType !== "text" && msgType !== "template" && (
           <>
             <div className="mb-4">
               <label className="text-gray-500 text-xs font-medium block mb-1">
@@ -337,6 +466,33 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
               </div>
             )}
           </>
+        )}
+
+        {/* WA Preview */}
+        {showPreview && (
+          <div className="mb-4">
+            <p className="text-gray-400 text-xs font-medium mb-2">Preview</p>
+            <div className="bg-[#e5ddd5] rounded-xl p-3">
+              <div className="flex justify-end">
+                <div className="bg-[#d9fdd3] rounded-xl rounded-tr-sm px-3 py-2 max-w-[85%] shadow-sm">
+                  {selectedTemplate?.mediaType && (
+                    <div className="flex items-center gap-1.5 text-[#54656f] text-xs mb-1.5 pb-1.5 border-b border-black/10">
+                      {selectedTemplate.mediaType === "image" && <ImageIcon className="w-3.5 h-3.5" />}
+                      {selectedTemplate.mediaType === "video" && <Video className="w-3.5 h-3.5" />}
+                      {selectedTemplate.mediaType === "file" && <FileText className="w-3.5 h-3.5" />}
+                      <span className="capitalize">{selectedTemplate.mediaType}</span>
+                    </div>
+                  )}
+                  <p
+                    className="text-[#111b21] text-sm leading-relaxed whitespace-pre-wrap break-words"
+                    dangerouslySetInnerHTML={{
+                      __html: renderWAPreview(previewText, msgType === "template" ? templateVariables : {}),
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {result && (

@@ -58,8 +58,14 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Parse template with variables
-    const messageContent = parseTemplate(template.content, variables);
+    const vars: Record<string, string> = variables ?? {};
+    const caption  = template.content      ? parseTemplate(template.content, vars)      : "";
+    const mediaUrl = template.mediaUrl     ? parseTemplate(template.mediaUrl, vars)     : null;
+    const filename = template.mediaFilename ? parseTemplate(template.mediaFilename, vars) : undefined;
+
+    const MEDIA_TYPE_MAP: Record<string, "image" | "video" | "document"> = {
+      image: "image", video: "video", file: "document",
+    };
 
     const client = await getOrCreateWaClient(id);
     if (client.status !== "connected") {
@@ -67,8 +73,14 @@ export async function POST(
       if (!ok) return NextResponse.json({ error: "WhatsApp is not connected" }, { status: 400 });
     }
 
-    // Send the message
-    const result = await client.sendText(to, messageContent);
+    if (template.mediaType && mediaUrl) {
+      const sendType = MEDIA_TYPE_MAP[template.mediaType] ?? "document";
+      await client.sendMedia(to, mediaUrl, sendType, caption || undefined, filename);
+    } else if (caption) {
+      await client.sendText(to, caption);
+    } else {
+      return NextResponse.json({ error: "Nothing to send (empty content and no media)" }, { status: 400 });
+    }
 
     // Log the message
     await db.messageLog.create({
@@ -76,17 +88,15 @@ export async function POST(
         numberId: id,
         direction: "OUT",
         toFrom: to,
-        content: messageContent,
+        content: caption || mediaUrl || "",
+        mediaType: template.mediaType ?? null,
         templateId: templateId,
       },
     });
 
     return NextResponse.json({
-      ...result,
-      templateUsed: {
-        id: template.id,
-        name: template.name,
-      }
+      success: true,
+      templateUsed: { id: template.id, name: template.name },
     });
   } catch (err) {
     console.error("[POST /api/numbers/[id]/send/template]", err);

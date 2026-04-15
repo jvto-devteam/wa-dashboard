@@ -7,6 +7,7 @@ import {
   ArrowLeft, QrCode, RefreshCw, LogOut, CheckCircle2,
   Send, Webhook, Key, Copy, Check, Loader2,
   MessageSquare, Image as ImageIcon, Video, FileText, Users,
+  Play, Music, Archive, File,
 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
@@ -171,14 +172,12 @@ function ConnectionTab({
 
 // ─── WA preview renderer ──────────────────────────────────────────────────────
 function renderWAPreview(text: string, vars: Record<string, string> = {}): string {
-  // Substitute variables first
   let s = text.replace(/\{([^}]+)\}/g, (_, name) => {
     const val = vars[name.trim()];
     return val
-      ? `<span class="text-gray-900">${val}</span>`
+      ? `<span>${val.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</span>`
       : `<span class="inline-block bg-amber-100 text-amber-700 font-mono text-xs rounded px-1 mx-0.5">{${name}}</span>`;
   });
-  // Escape HTML in non-span portions — already done above, just escape remaining
   s = s
     .replace(/```([\s\S]*?)```/g, "<code class=\"font-mono text-xs bg-black/10 rounded px-0.5\">$1</code>")
     .replace(/\*([^*\n]+)\*/g, "<strong>$1</strong>")
@@ -186,6 +185,72 @@ function renderWAPreview(text: string, vars: Record<string, string> = {}): strin
     .replace(/~([^~\n]+)~/g, "<del>$1</del>")
     .replace(/\n/g, "<br/>");
   return s;
+}
+
+// ─── WA media preview bubble ──────────────────────────────────────────────────
+function getFileIcon(filename?: string | null) {
+  const ext = filename?.split(".").pop()?.toLowerCase() ?? "";
+  if (["mp3","wav","ogg","m4a","aac"].includes(ext)) return <Music className="w-7 h-7 text-[#54656f]" />;
+  if (["zip","rar","7z","tar","gz"].includes(ext))   return <Archive className="w-7 h-7 text-[#54656f]" />;
+  return <File className="w-7 h-7 text-[#54656f]" />;
+}
+
+function WAMediaPreview({
+  mediaType, mediaUrl, filename,
+}: {
+  mediaType: string;
+  mediaUrl: string | null;
+  filename?: string | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+
+  if (mediaType === "image") {
+    const src = mediaUrl?.trim();
+    if (src && !imgError) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt="preview"
+          className="w-full max-h-52 object-cover rounded-lg mb-1"
+          onError={() => setImgError(true)}
+        />
+      );
+    }
+    return (
+      <div className="w-full h-36 rounded-lg bg-gray-200 flex flex-col items-center justify-center mb-1 gap-1">
+        <ImageIcon className="w-8 h-8 text-gray-400" />
+        {!src && <p className="text-gray-400 text-xs">Image URL not set</p>}
+        {imgError && <p className="text-gray-400 text-xs">Could not load image</p>}
+      </div>
+    );
+  }
+
+  if (mediaType === "video") {
+    return (
+      <div className="w-full h-36 rounded-lg bg-gray-900 flex flex-col items-center justify-center mb-1 gap-2 relative overflow-hidden">
+        <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+          <Play className="w-6 h-6 text-white ml-0.5" />
+        </div>
+        <p className="text-white/60 text-xs">Video</p>
+      </div>
+    );
+  }
+
+  if (mediaType === "file") {
+    const ext = filename?.split(".").pop()?.toUpperCase() ?? "FILE";
+    return (
+      <div className="flex items-center gap-3 bg-black/5 rounded-lg px-3 py-2.5 mb-1">
+        {getFileIcon(filename)}
+        <div className="min-w-0">
+          <p className="text-[#111b21] text-sm font-medium truncate">{filename || "document"}</p>
+          <p className="text-[#54656f] text-xs">{ext} · Document</p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ─── Send Tab ────────────────────────────────────────────────────────────────
@@ -295,227 +360,232 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
     { type: "template", icon: FileText, label: "Template" },
   ];
 
-  const inputCls = "w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-green-400 focus:ring-2 focus:ring-green-50 transition-colors";
+  const inputCls = "w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-[#25d366] focus:ring-2 focus:ring-[#25d366]/10 transition-colors";
 
-  // Compute preview text
+  // Resolve preview values
+  const resolveVars = (s: string) =>
+    s.replace(/\{([^}]+)\}/g, (_, n) => templateVariables[n.trim()] || "");
+
   const previewText = msgType === "template"
     ? (selectedTemplate?.content ?? "")
-    : msgType === "text"
-    ? text
-    : "";
+    : msgType === "text" ? text : "";
+
+  const resolvedMediaUrl = selectedTemplate?.mediaUrl
+    ? resolveVars(selectedTemplate.mediaUrl) || selectedTemplate.mediaUrl
+    : null;
+
+  const resolvedFilename = selectedTemplate?.mediaFilename
+    ? resolveVars(selectedTemplate.mediaFilename) || selectedTemplate.mediaFilename
+    : null;
 
   const showPreview = (msgType === "text" && text.trim()) ||
-    (msgType === "template" && selectedTemplate?.content);
+    (msgType === "template" && !!selectedTemplate);
+
+  const previewVars = msgType === "template" ? templateVariables : {};
 
   return (
-    <div className="max-w-xl mx-auto space-y-4">
+    <div className="space-y-4">
       {!connected && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
-          <p className="text-yellow-700 text-sm">Connect your WhatsApp first to send messages.</p>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+          <p className="text-amber-700 text-sm">Connect your WhatsApp first to send messages.</p>
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-        {/* Type tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5">
-          {tabs.map(({ type, icon: Icon, label }) => (
-            <button
-              key={type}
-              onClick={() => setMsgType(type)}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all",
-                msgType === type
-                  ? "bg-[#25d366] text-white"
-                  : "text-gray-500 hover:text-gray-700"
-              )}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className={cn("gap-4", showPreview ? "grid grid-cols-1 lg:grid-cols-2" : "flex flex-col max-w-xl mx-auto w-full")}>
+        {/* ── Form ── */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+          {/* Type tabs */}
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5">
+            {tabs.map(({ type, icon: Icon, label }) => (
+              <button
+                key={type}
+                onClick={() => setMsgType(type)}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                  msgType === type ? "bg-[#25d366] text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
 
-        {/* To */}
-        <div className="mb-4">
-          <label className="text-gray-500 text-xs font-medium block mb-1">
-            Recipient — phone number or group JID
-          </label>
-          <input
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            placeholder="628123456789 or 120363xxxxxx@g.us"
-            className={inputCls}
-          />
-        </div>
-
-        {/* Text content */}
-        {msgType === "text" && (
+          {/* To */}
           <div className="mb-4">
-            <label className="text-gray-500 text-xs font-medium block mb-1">Message</label>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={4}
-              placeholder="Type your message..."
-              className={inputCls + " resize-none"}
+            <label className="text-gray-500 text-xs font-medium block mb-1.5">Penerima</label>
+            <input
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder="628123456789 atau 120363xxxxxx@g.us"
+              className={inputCls}
             />
           </div>
-        )}
 
-        {/* Template selector */}
-        {msgType === "template" && (
-          <div className="space-y-4 mb-4">
-            <div>
-              <label className="text-gray-500 text-xs font-medium block mb-1">Template</label>
-              <select
-                value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
-                className={inputCls + " cursor-pointer"}
-              >
-                <option value="">— Pilih template —</option>
-                {templates.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {loadingTpl && (
-              <div className="flex items-center gap-2 text-gray-400 text-sm">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Loading template...
-              </div>
-            )}
-
-            {selectedTemplate && !loadingTpl && (
-              <>
-                {selectedTemplate.description && (
-                  <p className="text-gray-400 text-xs">{selectedTemplate.description}</p>
-                )}
-
-                {/* Media badge */}
-                {selectedTemplate.mediaType && (
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                    {selectedTemplate.mediaType === "image" && <ImageIcon className="w-3.5 h-3.5" />}
-                    {selectedTemplate.mediaType === "video" && <Video className="w-3.5 h-3.5" />}
-                    {selectedTemplate.mediaType === "file" && <FileText className="w-3.5 h-3.5" />}
-                    <span className="capitalize">{selectedTemplate.mediaType} attachment</span>
-                    {selectedTemplate.mediaUrl && !selectedTemplate.mediaUrl.includes("{") && (
-                      <span className="text-gray-300 ml-1 truncate max-w-[180px]">{selectedTemplate.mediaUrl}</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Variable inputs */}
-                {selectedTemplate.variables.length > 0 && (
-                  <div className="space-y-3">
-                    <p className="text-gray-500 text-xs font-medium">Variables</p>
-                    {selectedTemplate.variables.map(v => (
-                      <div key={v.name}>
-                        <label className="text-gray-500 text-xs block mb-1">
-                          <span className="font-mono text-gray-700">{`{${v.name}}`}</span>
-                          {v.isRequired && <span className="text-red-400 ml-1">*</span>}
-                          {v.description && <span className="text-gray-400 ml-1">— {v.description}</span>}
-                        </label>
-                        <input
-                          value={templateVariables[v.name] ?? ""}
-                          onChange={(e) => setTemplateVariables(prev => ({ ...prev, [v.name]: e.target.value }))}
-                          placeholder={v.example ?? `Enter ${v.name}...`}
-                          className={inputCls}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Media URL */}
-        {msgType !== "text" && msgType !== "template" && (
-          <>
+          {/* Text */}
+          {msgType === "text" && (
             <div className="mb-4">
-              <label className="text-gray-500 text-xs font-medium block mb-1">
-                {msgType.charAt(0).toUpperCase() + msgType.slice(1)} URL
-              </label>
-              <input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://..."
-                className={inputCls}
+              <label className="text-gray-500 text-xs font-medium block mb-1.5">Pesan</label>
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={5}
+                placeholder="Ketik pesan..."
+                className={inputCls + " resize-none"}
               />
             </div>
-            <div className="mb-4">
-              <label className="text-gray-500 text-xs font-medium block mb-1">Caption (optional)</label>
-              <input
-                value={caption}
-                onChange={(e) => setCaption(e.target.value)}
-                placeholder="Caption..."
-                className={inputCls}
-              />
-            </div>
-            {msgType === "document" && (
-              <div className="mb-4">
-                <label className="text-gray-500 text-xs font-medium block mb-1">Filename (optional)</label>
-                <input
-                  value={filename}
-                  onChange={(e) => setFilename(e.target.value)}
-                  placeholder="document.pdf"
-                  className={inputCls}
-                />
-              </div>
-            )}
-          </>
-        )}
+          )}
 
-        {/* WA Preview */}
-        {showPreview && (
-          <div className="mb-4">
-            <p className="text-gray-400 text-xs font-medium mb-2">Preview</p>
-            <div className="bg-[#e5ddd5] rounded-xl p-3">
-              <div className="flex justify-end">
-                <div className="bg-[#d9fdd3] rounded-xl rounded-tr-sm px-3 py-2 max-w-[85%] shadow-sm">
-                  {selectedTemplate?.mediaType && (
-                    <div className="flex items-center gap-1.5 text-[#54656f] text-xs mb-1.5 pb-1.5 border-b border-black/10">
-                      {selectedTemplate.mediaType === "image" && <ImageIcon className="w-3.5 h-3.5" />}
-                      {selectedTemplate.mediaType === "video" && <Video className="w-3.5 h-3.5" />}
-                      {selectedTemplate.mediaType === "file" && <FileText className="w-3.5 h-3.5" />}
-                      <span className="capitalize">{selectedTemplate.mediaType}</span>
+          {/* Template */}
+          {msgType === "template" && (
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-gray-500 text-xs font-medium block mb-1.5">Template</label>
+                <select
+                  value={templateId}
+                  onChange={(e) => setTemplateId(e.target.value)}
+                  className={inputCls + " cursor-pointer"}
+                >
+                  <option value="">— Pilih template —</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {loadingTpl && (
+                <div className="flex items-center gap-2 text-gray-400 text-xs py-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Loading...
+                </div>
+              )}
+
+              {selectedTemplate && !loadingTpl && (
+                <>
+                  {selectedTemplate.description && (
+                    <p className="text-gray-400 text-xs bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+                      {selectedTemplate.description}
+                    </p>
+                  )}
+                  {selectedTemplate.variables.length > 0 && (
+                    <div className="space-y-3 pt-1">
+                      <p className="text-gray-500 text-xs font-semibold uppercase tracking-wide">Variabel</p>
+                      {selectedTemplate.variables.map(v => (
+                        <div key={v.name}>
+                          <label className="flex items-center gap-1.5 text-gray-600 text-xs mb-1.5">
+                            <code className="bg-gray-100 text-gray-700 rounded px-1.5 py-0.5 font-mono">{`{${v.name}}`}</code>
+                            {v.isRequired && <span className="text-red-400 font-medium">*</span>}
+                            {v.description && <span className="text-gray-400">· {v.description}</span>}
+                          </label>
+                          <input
+                            value={templateVariables[v.name] ?? ""}
+                            onChange={(e) => setTemplateVariables(prev => ({ ...prev, [v.name]: e.target.value }))}
+                            placeholder={v.example ?? `Isi ${v.name}...`}
+                            className={inputCls}
+                          />
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <p
-                    className="text-[#111b21] text-sm leading-relaxed whitespace-pre-wrap break-words"
-                    dangerouslySetInnerHTML={{
-                      __html: renderWAPreview(previewText, msgType === "template" ? templateVariables : {}),
-                    }}
-                  />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Media URL */}
+          {msgType !== "text" && msgType !== "template" && (
+            <>
+              <div className="mb-3">
+                <label className="text-gray-500 text-xs font-medium block mb-1.5">
+                  URL {msgType === "image" ? "Gambar" : msgType === "video" ? "Video" : "File"}
+                </label>
+                <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className={inputCls} />
+              </div>
+              <div className="mb-3">
+                <label className="text-gray-500 text-xs font-medium block mb-1.5">Caption (opsional)</label>
+                <input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption..." className={inputCls} />
+              </div>
+              {msgType === "document" && (
+                <div className="mb-3">
+                  <label className="text-gray-500 text-xs font-medium block mb-1.5">Nama File (opsional)</label>
+                  <input value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="dokumen.pdf" className={inputCls} />
+                </div>
+              )}
+            </>
+          )}
+
+          {result && (
+            <div className={cn(
+              "rounded-xl px-4 py-3 mb-4 flex items-center gap-2",
+              result.ok ? "bg-[#25d366]/10 border border-[#25d366]/20" : "bg-red-50 border border-red-200"
+            )}>
+              <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", result.ok ? "bg-[#25d366]" : "bg-red-500")} />
+              <p className={result.ok ? "text-[#128C7E] text-sm font-medium" : "text-red-600 text-sm"}>
+                {result.msg}
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={handleSend}
+            disabled={!connected || sending}
+            className="w-full flex items-center justify-center gap-2 bg-[#25d366] hover:bg-[#22c55e] text-white py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 shadow-sm shadow-[#25d366]/20"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {sending ? "Mengirim..." : "Kirim Pesan"}
+          </button>
+        </div>
+
+        {/* ── WA Preview ── */}
+        {showPreview && (
+          <div className="flex flex-col">
+            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wide mb-2 px-0.5">Preview WhatsApp</p>
+            {/* Phone frame */}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex-1">
+              {/* WA chat header */}
+              <div className="bg-[#128C7E] px-4 py-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-medium">{to.trim() || "Penerima"}</p>
+                  <p className="text-white/60 text-xs">online</p>
+                </div>
+              </div>
+              {/* Chat area */}
+              <div
+                className="p-4 min-h-[200px]"
+                style={{ backgroundColor: "#e5ddd5" }}
+              >
+                <div className="flex justify-end">
+                  <div className="bg-[#d9fdd3] rounded-xl rounded-tr-sm px-3 py-2 max-w-[85%] shadow-sm min-w-[120px]">
+                    {/* Media preview */}
+                    {selectedTemplate?.mediaType && (
+                      <WAMediaPreview
+                        mediaType={selectedTemplate.mediaType}
+                        mediaUrl={resolvedMediaUrl}
+                        filename={resolvedFilename}
+                      />
+                    )}
+                    {/* Text */}
+                    {previewText && (
+                      <p
+                        className="text-[#111b21] text-sm leading-relaxed break-words"
+                        dangerouslySetInnerHTML={{ __html: renderWAPreview(previewText, previewVars) }}
+                      />
+                    )}
+                    {/* Timestamp */}
+                    <p className="text-[#54656f] text-[10px] text-right mt-1">
+                      {new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                      {" ✓✓"}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         )}
-
-        {result && (
-          <div className={cn(
-            "rounded-xl px-4 py-3 mb-4",
-            result.ok
-              ? "bg-green-50 border border-green-200"
-              : "bg-red-50 border border-red-200"
-          )}>
-            <p className={result.ok ? "text-[#25d366] text-sm" : "text-red-600 text-sm"}>
-              {result.msg}
-            </p>
-          </div>
-        )}
-
-        <button
-          onClick={handleSend}
-          disabled={!connected || sending}
-          className="w-full flex items-center justify-center gap-2 bg-[#25d366] hover:bg-[#22c55e] text-white py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
-        >
-          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          {sending ? "Sending..." : "Send Message"}
-        </button>
       </div>
     </div>
   );
@@ -950,24 +1020,48 @@ export default function NumberDetailPage() {
   ];
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-6">
         <button
           onClick={() => router.push("/numbers")}
-          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm mb-4 transition-colors"
+          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-sm mb-5 transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Numbers
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Semua Nomor
         </button>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{info.label}</h1>
-            {info.phoneNumber && (
-              <p className="text-gray-500 text-sm mt-0.5">+{info.phoneNumber}</p>
-            )}
+
+        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className={cn(
+                "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0",
+                info.status === "connected" ? "bg-[#25d366]/10" : "bg-gray-100"
+              )}>
+                <MessageSquare className={cn("w-6 h-6", info.status === "connected" ? "text-[#25d366]" : "text-gray-400")} />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">{info.label}</h1>
+                <p className="text-gray-400 text-sm mt-0.5">
+                  {info.phoneNumber ? `+${info.phoneNumber}` : "Belum terhubung"}
+                </p>
+              </div>
+            </div>
+            <StatusBadge status={info.status} />
           </div>
-          <StatusBadge status={info.status} />
+
+          {info.stats && (
+            <div className="flex gap-4 mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-[#25d366]" />
+                <span className="text-gray-500 text-xs">{info.stats.sent.toLocaleString()} terkirim</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                <span className="text-gray-500 text-xs">{info.stats.received.toLocaleString()} diterima</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -979,9 +1073,9 @@ export default function NumberDetailPage() {
               key={tabId}
               onClick={() => setActiveTab(tabId)}
               className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium transition-all",
+                "flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-medium transition-all",
                 activeTab === tabId
-                  ? "bg-[#25d366] text-white"
+                  ? "bg-[#25d366] text-white shadow-sm"
                   : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
               )}
             >

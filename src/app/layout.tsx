@@ -23,7 +23,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-gray-50 text-gray-900 antialiased`}>
+      <body className={`${inter.className} bg-[#f4f4f6] text-gray-900 antialiased`}>
         {isAuthPage ? (
           <div className="min-h-screen flex items-center justify-center p-4">
             {children}
@@ -32,8 +32,8 @@ export default async function RootLayout({
           <AuthProvider>
             <div className="flex h-screen overflow-hidden">
               <Sidebar />
-              <main className="flex-1 ml-64 overflow-y-auto">
-                <div className="min-h-screen p-8">{children}</div>
+              <main className="flex-1 ml-60 overflow-y-auto">
+                <div className="min-h-screen p-6">{children}</div>
               </main>
             </div>
           </AuthProvider>

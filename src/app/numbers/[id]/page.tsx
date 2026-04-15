@@ -171,17 +171,31 @@ function ConnectionTab({
 
 // ─── Send Tab ────────────────────────────────────────────────────────────────
 function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; connected: boolean; initialTo?: string }) {
-  type MsgType = "text" | "image" | "video" | "document";
+  type MsgType = "text" | "image" | "video" | "document" | "template";
   const [msgType, setMsgType] = useState<MsgType>("text");
   const [to, setTo] = useState(initialTo);
 
   useEffect(() => {
     if (initialTo) setTo(initialTo);
   }, [initialTo]);
+
+  useEffect(() => {
+    // Fetch templates when template tab is selected
+    if (msgType === "template" && templates.length === 0) {
+      fetch("/api/templates")
+        .then(res => res.json())
+        .then(data => setTemplates(data))
+        .catch(() => {});
+    }
+  }, [msgType, templates.length]);
+
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [caption, setCaption] = useState("");
   const [filename, setFilename] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; variables: any[] }>>([]);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
@@ -196,6 +210,16 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ to: to.trim(), text }),
+        });
+      } else if (msgType === "template") {
+        if (!templateId) {
+          setResult({ ok: false, msg: "Please select a template" });
+          return;
+        }
+        res = await fetch(`/api/numbers/${numberId}/send/template`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: to.trim(), templateId, variables: templateVariables }),
         });
       } else {
         res = await fetch(`/api/numbers/${numberId}/send/media`, {
@@ -218,6 +242,7 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
     { type: "image", icon: ImageIcon, label: "Image" },
     { type: "video", icon: Video, label: "Video" },
     { type: "document", icon: FileText, label: "Document" },
+    { type: "template", icon: FileText, label: "Template" },
   ];
 
   const inputCls = "w-full bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-green-400 focus:ring-2 focus:ring-green-50 transition-colors";

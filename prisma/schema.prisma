@@ -26,6 +26,7 @@ model User {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   waNumbers WaNumber[]
+  templates Template[]
 }
 
 model WaNumber {
@@ -52,5 +53,33 @@ model MessageLog {
   toFrom    String
   content   String?
   mediaType String?
+  templateId String?
+  template   Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   createdAt DateTime  @default(now())
+}
+
+model Template {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  content     String
+  description String?
+  variables   TemplateVariable[]
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  messageLogs MessageLog[]
+}
+
+model TemplateVariable {
+  id         String   @id @default(cuid())
+  templateId String
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name       String   // Nama variabel seperti "user_name"
+  description String? // Deskripsi variabel
+  example    String?  // Contoh nilai
+  isRequired Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

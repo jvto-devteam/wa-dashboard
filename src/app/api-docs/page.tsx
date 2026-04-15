@@ -422,6 +422,53 @@ curl_close($curl);`}
 ]`}
           />
 
+          {/* send_template */}
+          <Endpoint
+            method="POST"
+            path="/api/v1/send_template"
+            description="Kirim pesan menggunakan template dengan variabel dinamis"
+            body={`{
+  "api_key":     "XXXXXX-YYYYYY-ZZZZZZ",
+  "number_key":  "XXXXXX-YYYYYY-ZZZZZZ",
+  "phone_no":    "628123456789",
+  "template_id": "template-id-here",
+  "variables": {
+    "user_name": "John Doe",
+    "order_id":  "ORD-12345",
+    "company":   "Perusahaan ABC"
+  }
+}`}
+            phpExample={`$data = [
+  "api_key"     => config('wa.wa_api_key'),
+  "number_key"  => config('wa.wa_number_key'),
+  "phone_no"    => "628123456789",
+  "template_id" => "template-id-here",
+  "variables"   => [
+    "user_name" => "John Doe",
+    "order_id"  => "ORD-12345",
+    "company"   => "Perusahaan ABC"
+  ]
+];
+$curl = curl_init();
+curl_setopt_array($curl, [
+  CURLOPT_URL            => '${baseUrl}/api/v1/send_template',
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_CUSTOMREQUEST  => 'POST',
+  CURLOPT_POSTFIELDS     => json_encode($data),
+  CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+]);
+$response = json_decode(curl_exec($curl));
+curl_close($curl);`}
+            response={`{
+  "success": true,
+  "message_id": "3EB0C6D6F4A8B12D",
+  "template_used": {
+    "id": "template-id-here",
+    "name": "Welcome Message"
+  }
+}`}
+          />
+
         </div>
       </Section>
 

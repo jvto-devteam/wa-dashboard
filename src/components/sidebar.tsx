@@ -10,6 +10,7 @@ import {
   Users,
   BarChart3,
   LogOut,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/providers";
@@ -17,6 +18,7 @@ import { useAuth } from "@/components/providers";
 const userNavItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/numbers", label: "My Numbers", icon: Phone },
+  { href: "/templates", label: "Templates", icon: FileText },
   { href: "/api-docs", label: "API Docs", icon: BookOpen },
 ];
 

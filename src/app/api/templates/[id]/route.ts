@@ -48,7 +48,7 @@ export async function PUT(req: NextRequest, { params }: { params: Params }) {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { name, content, description, variables, isActive } = await req.json() as any;
+    const { name, content, description, variables, isActive, mediaType, mediaUrl, mediaFilename } = await req.json() as any;
 
     if (name !== undefined && !name?.trim()) {
       return NextResponse.json({ error: "Name cannot be empty" }, { status: 400 });
@@ -60,10 +60,13 @@ export async function PUT(req: NextRequest, { params }: { params: Params }) {
     const updated = await db.template.update({
       where: { id },
       data: {
-        ...(name      !== undefined && { name: name.trim() }),
-        ...(content   !== undefined && { content: content.trim() }),
+        ...(name        !== undefined && { name: name.trim() }),
+        ...(content     !== undefined && { content: content.trim() }),
         ...(description !== undefined && { description: description?.trim() ?? null }),
-        ...(isActive  !== undefined && { isActive }),
+        ...(isActive    !== undefined && { isActive }),
+        ...(mediaType   !== undefined && { mediaType: mediaType ?? null }),
+        ...(mediaUrl    !== undefined && { mediaUrl: mediaUrl?.trim() || null }),
+        ...(mediaFilename !== undefined && { mediaFilename: mediaFilename?.trim() || null }),
         ...(variables !== undefined && {
           variables: {
             deleteMany: {},

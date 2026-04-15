@@ -179,6 +179,14 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
     if (initialTo) setTo(initialTo);
   }, [initialTo]);
 
+  const [text, setText] = useState("");
+  const [url, setUrl] = useState("");
+  const [caption, setCaption] = useState("");
+  const [filename, setFilename] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string; variables: any[] }>>([]);
+
   useEffect(() => {
     // Fetch templates when template tab is selected
     if (msgType === "template" && templates.length === 0) {
@@ -188,14 +196,6 @@ function SendTab({ numberId, connected, initialTo = "" }: { numberId: string; co
         .catch(() => {});
     }
   }, [msgType, templates.length]);
-
-  const [text, setText] = useState("");
-  const [url, setUrl] = useState("");
-  const [caption, setCaption] = useState("");
-  const [filename, setFilename] = useState("");
-  const [templateId, setTemplateId] = useState("");
-  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
-  const [templates, setTemplates] = useState<Array<{ id: string; name: string; variables: any[] }>>([]);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 

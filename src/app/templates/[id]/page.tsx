@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Edit, Trash2, Copy, Check } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Copy, Check, Image, FileText, Video } from "lucide-react";
 import Link from "next/link";
 
 interface Template {
@@ -11,6 +11,9 @@ interface Template {
   content: string;
   description?: string;
   isActive: boolean;
+  mediaType?: string | null;
+  mediaUrl?: string | null;
+  mediaFilename?: string | null;
   createdAt: string;
   updatedAt: string;
   variables: Array<{
@@ -162,6 +165,39 @@ export default function TemplateDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Media */}
+        {template.mediaType && (
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-800">Lampiran Media</h2>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="flex items-center gap-3">
+                {template.mediaType === "image" && <Image    className="w-5 h-5 text-purple-500" />}
+                {template.mediaType === "file"  && <FileText className="w-5 h-5 text-orange-500" />}
+                {template.mediaType === "video" && <Video    className="w-5 h-5 text-pink-500"   />}
+                <span className="text-sm font-medium text-gray-800 capitalize">{template.mediaType}</span>
+              </div>
+              {template.mediaUrl && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">URL</p>
+                  <code className={`text-sm font-mono break-all ${template.mediaUrl.startsWith("{") ? "text-amber-600 bg-amber-50 px-2 py-0.5 rounded" : "text-gray-700"}`}>
+                    {template.mediaUrl}
+                  </code>
+                </div>
+              )}
+              {template.mediaFilename && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Nama file</p>
+                  <code className={`text-sm font-mono ${template.mediaFilename.startsWith("{") ? "text-amber-600 bg-amber-50 px-2 py-0.5 rounded" : "text-gray-700"}`}>
+                    {template.mediaFilename}
+                  </code>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Variables */}
         {template.variables.length > 0 && (

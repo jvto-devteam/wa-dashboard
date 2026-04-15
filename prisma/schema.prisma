@@ -59,17 +59,20 @@ model MessageLog {
 }
 
 model Template {
-  id          String           @id @default(cuid())
-  userId      String
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String
-  content     String
-  description String?
-  variables   TemplateVariable[]
-  isActive    Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  messageLogs MessageLog[]
+  id            String             @id @default(cuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  content       String
+  description   String?
+  mediaType     String?            // "image" | "file" | "video"
+  mediaUrl      String?            // static URL or {variable_name}
+  mediaFilename String?            // optional display name (files), can be {variable_name}
+  variables     TemplateVariable[]
+  isActive      Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  messageLogs   MessageLog[]
 }
 
 model TemplateVariable {

@@ -11,8 +11,8 @@ declare global {
 
 export default function EmbeddedSignupPage() {
   const [isLoaded, setIsLoaded] = useState(false);
-  const appId = process.env.FACEBOOK_APP_ID;
-  const configId = process.env.FACEBOOK_LOGIN_BUSINESS_CONFIG_ID;
+  const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '1487609042970236';
+  const configId = process.env.NEXT_PUBLIC_FACEBOOK_LOGIN_BUSINESS_CONFIG_ID || '1248176634152808';
 
   const initFacebookSDK = useCallback(() => {
     if (window.FB) {
